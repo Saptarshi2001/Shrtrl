@@ -269,3 +269,176 @@ CLICKHOUSE_USER=shrtrl
 CLICKHOUSE_PASSWORD=shrtrl_clickhouse_password
 CLICKHOUSE_DB=shrtrl
 ```
+
+## Dockerfile review
+
+Current `DOCKERFILE`:
+
+```dockerfile
+FROM: Java:21--alpine
+WORKDIR /Shrtrl
+COPY mvn install
+COPY . .
+COPY mvn test
+EXPOSE ${APP_PORT}
+CMD ["mvn","run"]
+```
+
+This file has several issues.
+
+### 1. `FROM` syntax is invalid
+
+Current:
+
+```dockerfile
+FROM: Java:21--alpine
+```
+
+Dockerfile instructions do not use `:` after the instruction name.
+
+Also, `Java:21--alpine` is not a normal Java image name. Docker image names are case-sensitive in practice, and official Java runtime images usually come from Eclipse Temurin.
+
+Use something like:
+
+```dockerfile
+FROM eclipse-temurin:21-jdk-alpine
+```
+
+### 2. `COPY mvn install` does not run Maven
+
+Current:
+
+```dockerfile
+COPY mvn install
+```
+
+`COPY` copies files. It does not execute commands.
+
+If you want to run Maven, use `RUN`:
+
+```dockerfile
+RUN ./mvnw clean package
+```
+
+This project has `mvnw` and `mvnw.cmd`, not a plain `mvn` file. Inside Linux containers, use `./mvnw`.
+
+### 3. `COPY mvn test` also does not run tests
+
+Current:
+
+```dockerfile
+COPY mvn test
+```
+
+Same issue: this tries to copy a file/folder named `mvn` into a destination named `test`. It does not run tests.
+
+Use:
+
+```dockerfile
+RUN ./mvnw test
+```
+
+or let `clean package` run tests by default.
+
+### 4. `EXPOSE ${APP_PORT}` is not the right port
+
+Your Spring Boot app listens inside the container on `8080` by default.
+
+Use:
+
+```dockerfile
+EXPOSE 8080
+```
+
+Then Compose maps the host port:
+
+```yaml
+ports:
+  - "${APP_PORT}:8080"
+```
+
+`APP_PORT` is the host-side port. The container-side port should usually stay `8080`.
+
+### 5. `CMD ["mvn","run"]` is not a valid Spring Boot start command
+
+Current:
+
+```dockerfile
+CMD ["mvn","run"]
+```
+
+Maven does not have a `run` lifecycle command like that.
+
+For Spring Boot development, the Maven command is:
+
+```shell
+./mvnw spring-boot:run
+```
+
+But for Docker images, it is usually better to run the built jar:
+
+```dockerfile
+CMD ["java", "-jar", "app.jar"]
+```
+
+### 6. The file is named `DOCKERFILE`
+
+Docker commonly looks for a file named `Dockerfile`.
+
+Your Compose file can still use `DOCKERFILE` if you specify it:
+
+```yaml
+build:
+  context: .
+  dockerfile: DOCKERFILE
+```
+
+But if you only write:
+
+```yaml
+build:
+  context: .
+```
+
+Compose expects `Dockerfile`, not `DOCKERFILE`.
+
+Either rename `DOCKERFILE` to `Dockerfile`, or explicitly mention `dockerfile: DOCKERFILE` in Compose.
+
+### 7. A single-stage image will include build tools and source code
+
+If you build and run in the same image, the final image contains Maven cache, source files, and build tools. It works, but it is larger than needed.
+
+For a Spring Boot app, a multi-stage Dockerfile is cleaner: one stage builds the jar, the second stage runs only the jar.
+
+## Example corrected Dockerfile
+
+```dockerfile
+FROM eclipse-temurin:21-jdk-alpine AS build
+WORKDIR /app
+
+COPY mvnw .
+COPY .mvn .mvn
+COPY pom.xml .
+COPY src src
+
+RUN ./mvnw clean package
+
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+COPY --from=build /app/target/*.jar app.jar
+
+EXPOSE 8080
+
+CMD ["java", "-jar", "app.jar"]
+```
+
+If keeping the filename as `DOCKERFILE`, use this in `compose.yaml`:
+
+```yaml
+services:
+  app:
+    build:
+      context: .
+      dockerfile: DOCKERFILE
+```
