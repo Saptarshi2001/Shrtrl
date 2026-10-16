@@ -31,3 +31,8 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Local code-review notes
+/users-module-review.md
+/urls-module-review.md
+/groups-module-review.md

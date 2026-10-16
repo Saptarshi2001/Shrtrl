@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shrtrl sample click events</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 28px; line-height: 1.45; }
+    h1 { margin: 0 0 8px; font-size: 1.5rem; }
+    p { margin: 0 0 20px; color: #666; }
+    .table-wrap { overflow-x: auto; border: 1px solid #9995; border-radius: 10px; }
+    table { border-collapse: collapse; width: 100%; min-width: 1050px; font-size: .9rem; }
+    th, td { padding: 11px 13px; text-align: left; border-bottom: 1px solid #9994; white-space: nowrap; }
+    th { position: sticky; top: 0; background: #3478c9; color: white; }
+    tbody tr:nth-child(even) { background: #9991; }
+    tbody tr:last-child td { border-bottom: 0; }
+    code { font-family: ui-monospace, Consolas, monospace; }
+    .empty { color: #888; font-style: italic; }
+    .note { margin-top: 16px; font-size: .88rem; }
+  </style>
+</head>
+<body>
+  <h1>Sample analytics events</h1>
+  <p>Nine example click rows from <code>analytics_events_sample.sql</code>, ordered by UTC time. These are illustrative values; the local ClickHouse server was unavailable for execution.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>event_id</th><th>userid</th><th>shortcode</th><th>occurred_at (UTC)</th><th>country</th><th>state</th><th>ip</th><th>user_agent</th><th>referrer</th></tr></thead>
+      <tbody>
+        <tr><td><code>…0004</code></td><td><code>2222…</code></td><td><code>c3</code></td><td>2026-10-01 08:00</td><td>IN</td><td>DL</td><td><code>192.0.2.30</code></td><td>Safari</td><td class="empty">empty</td></tr>
+        <tr><td><code>…0001</code></td><td><code>1111…</code></td><td><code>a1</code></td><td>2026-10-01 09:15</td><td>IN</td><td>WB</td><td><code>198.51.100.10</code></td><td>Chrome</td><td><code>https://search.example/</code></td></tr>
+        <tr><td><code>…0002</code></td><td><code>1111…</code></td><td><code>a1</code></td><td>2026-10-01 10:20</td><td>IN</td><td>WB</td><td><code>198.51.100.10</code></td><td>Chrome</td><td class="empty">empty</td></tr>
+        <tr><td><code>…0003</code></td><td><code>1111…</code></td><td><code>b2</code></td><td>2026-10-01 12:05</td><td>US</td><td>NY</td><td><code>203.0.113.20</code></td><td>Firefox</td><td><code>https://social.example/</code></td></tr>
+        <tr><td><code>…0006</code></td><td><code>1111…</code></td><td><code>b2</code></td><td>2026-10-02 07:45</td><td>GB</td><td>ENG</td><td><code>192.0.2.31</code></td><td>Safari</td><td><code>https://social.example/</code></td></tr>
+        <tr><td><code>…0005</code></td><td><code>1111…</code></td><td><code>a1</code></td><td>2026-10-02 14:30</td><td>US</td><td>CA</td><td><code>203.0.113.21</code></td><td>Firefox</td><td><code>https://search.example/</code></td></tr>
+        <tr><td><code>…0007</code></td><td><code>1111…</code></td><td><code>a1</code></td><td>2026-10-03 11:10</td><td>IN</td><td>MH</td><td><code>198.51.100.11</code></td><td>Chrome</td><td><code>https://search.example/</code></td></tr>
+        <tr><td><code>…0009</code></td><td><code>2222…</code></td><td><code>c3</code></td><td>2026-10-03 16:35</td><td>US</td><td>CA</td><td><code>203.0.113.22</code></td><td>Firefox</td><td><code>https://search.example/</code></td></tr>
+        <tr><td><code>…0008</code></td><td><code>1111…</code></td><td><code>b2</code></td><td>2026-10-03 18:20</td><td>IN</td><td>WB</td><td><code>198.51.100.12</code></td><td>Chrome</td><td class="empty">empty</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">IDs are abbreviated for display. The SQL file contains the full UUIDs and timestamps.</p>
+</body>
+</html>

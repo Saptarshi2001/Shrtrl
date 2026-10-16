@@ -1,0 +1,236 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shrtrl v1 analytics queryability report</title><style>
+:root{--ink:#162235;--blue:#1764c2;--line:#dce5ee;--paper:#fff;--bg:#f3f7fb}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.62 'Segoe UI',Arial,sans-serif}
+.mast{background:linear-gradient(125deg,#102f55,#12639b);color:white;padding:54px max(24px,calc((100vw - 1120px)/2)) 48px}
+.mast .eyebrow{font-size:.78rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;opacity:.8}
+.mast h1{font-size:clamp(2rem,4vw,3.2rem);line-height:1.1;max-width:850px;margin:.6rem 0}.mast p{max-width:830px;margin:0;opacity:.9}
+.layout{max-width:1120px;margin:0 auto;display:grid;grid-template-columns:210px minmax(0,1fr);gap:28px;padding:28px 22px 70px}
+.side{position:sticky;top:20px;align-self:start;background:white;border:1px solid var(--line);border-radius:12px;padding:20px}
+.side a{display:block;padding:6px 0;color:var(--blue);text-decoration:none;font-size:.9rem}.side a:hover{text-decoration:underline}
+main{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:clamp(22px,4vw,48px);box-shadow:0 12px 36px #1c436312}
+main>h1{display:none}h2{font-size:1.7rem;line-height:1.25;margin:2.5rem 0 1rem;border-top:1px solid var(--line);padding-top:1.7rem}h2:first-of-type{margin-top:1.5rem}
+h3{font-size:1.2rem;margin-top:1.7rem}p,li{max-width:86ch}a{color:var(--blue)}a:hover{text-decoration-thickness:2px}strong{color:#183d64}
+table{border-collapse:collapse;width:100%;font-size:.92rem;margin:18px 0 30px}th{background:#eaf2fa;text-align:left;color:#183d64}
+th,td{padding:11px 12px;border:1px solid var(--line);vertical-align:top}tbody tr:nth-child(even){background:#f8fbfd}
+code{font:.88em Consolas,Monaco,monospace;background:#eef3f8;padding:.15em .32em;border-radius:4px}
+pre{overflow:auto;background:#10283f;color:#eaf4ff;border-radius:10px;padding:18px 20px;line-height:1.5}pre code{background:none;color:inherit;padding:0}
+main>p:first-of-type{background:#eaf4ff;border-left:5px solid #397ac3;padding:16px 18px;border-radius:0 8px 8px 0}main>p:first-of-type strong{color:#8c3812}
+@media(max-width:850px){.layout{display:block}.side{position:static;margin-bottom:20px}.side a{display:inline-block;margin-right:12px}main{padding:22px;overflow:auto}}
+@media print{body{background:white}.mast{padding:20px;color:#162235;background:white}.side{display:none}.layout{display:block;padding:0}main{border:0;box-shadow:none;padding:0}a{color:#162235}pre{white-space:pre-wrap}}
+</style></head><body>
+<header class="mast"><div class="eyebrow">Repository research · 4 October 2026</div><h1>Shrtrl v1 analytics</h1>
+<p>What can be queried today, what the event schema could support, and where the v1 API stops.</p></header>
+<div class="layout"><nav class="side" aria-label="Sections"><strong>Contents</strong>
+<a href="#at-a-glance">At a glance</a><a href="#declared-v1-analytics-routes">Declared routes</a>
+<a href="#data-available-for-future-queries">Available data</a><a href="#illustrative-direct-clickhouse-sql">SQL examples</a>
+<a href="#key-limits-and-gaps-for-v1-planning">Limits and gaps</a><a href="#practical-v1-query-surface-to-implement">Practical v1 surface</a>
+<a href="#verification-and-scope">Verification</a></nav><main><h1 id="shrtrl-v1-analytics-queryability-report">Shrtrl v1 analytics: queryability report</h1>
+<p><strong>Repository snapshot:</strong> 4 October 2026. <strong>Method:</strong> static inspection of the current workspace; no code or tests changed. <strong>Meaning of “queryable”:</strong> an end user can request an analytics result through a working v1 HTTP endpoint. On that definition, <strong>no click analytics are currently queryable through v1</strong>. The controller declares routes, but its methods do not return responses, call a service overload that does not exist, and use SQL that does not match the table. The redirect path does not publish an event. <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L20">AnalyticsController.java:20–102</a>, <a href="src/main/java/com/shrtrl/analytics/service/AnalyticsService.java#L54">AnalyticsService.java:54–58</a>, <a href="src/main/java/com/shrtrl/urls/controller/UrlController.java#L70">UrlController.java:70–88</a></p>
+<p>This report treats the code as it is, including work in progress in the checkout. It does not treat the older <code>analytics-module-review.md</code> as implementation evidence.</p>
+<h2 id="at-a-glance">At a glance</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Current status</th>
+<th>What it means for queries</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HTTP analytics API</td>
+<td>Eight declared GET methods under <strong>case-sensitive</strong> <code>/api/v1/Analytics</code>; none has a usable response implementation</td>
+<td>No supported analytics response shape or working endpoint exists. <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L20">AnalyticsController.java:20–102</a></td>
+</tr>
+<tr>
+<td>Query service</td>
+<td><code>query(String, Map&lt;String,Object&gt;)</code> delegates to ClickHouse <code>queryAll</code></td>
+<td>There is a low-level query primitive, but the controller calls it with one argument and supplies no parameter map. <a href="src/main/java/com/shrtrl/analytics/service/AnalyticsService.java#L54">AnalyticsService.java:54–58</a></td>
+</tr>
+<tr>
+<td>Click data</td>
+<td><code>events</code> stores one event row with user, short code, UTC timestamp, geography, IP, user agent, and referrer</td>
+<td>These columns can support direct ClickHouse SQL <strong>if rows are present</strong>; they are not a v1 API contract. <a href="docker/clickhouse/init/001_create_events.sql#L1">001_create_events.sql:1–15</a></td>
+</tr>
+<tr>
+<td>Event generation</td>
+<td>Redirect resolves and returns 302; event insertion is commented out</td>
+<td>Normal redirects generate no analytics rows in this source. <a href="src/main/java/com/shrtrl/urls/controller/UrlController.java#L70">UrlController.java:70–88</a></td>
+</tr>
+<tr>
+<td>Transport</td>
+<td>Redis stream or PostgreSQL outbox is selected by configuration; workers insert into ClickHouse</td>
+<td>Transport plumbing exists, but its producer has no active redirect caller. <a href="src/main/resources/application.properties#L16">application.properties:16</a>, <a href="src/main/java/com/shrtrl/analytics/Transport/Redis/RedisWorker.java#L45">RedisWorker.java:45–71</a>, <a href="src/main/java/com/shrtrl/analytics/Transport/Postgres/OutboxWorker.java#L33">OutboxWorker.java:33–48</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="declared-v1-analytics-routes">Declared v1 analytics routes</h2>
+<p>These are <strong>source declarations, not callable analytics features</strong>. All paths use the exact <code>/api/v1/Analytics</code> prefix. Every method declares <code>ResponseEntity&lt;?&gt;</code> and has no return statement. The service requires <code>(sql, parameters)</code>, but the controller passes only SQL. <code>List</code> is also used without an import. These are source-level compilation blockers, so no success payload, status, pagination behavior, or live result can be claimed. <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L1">AnalyticsController.java:1–15</a>, <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L30">AnalyticsController.java:30–102</a>, <a href="src/main/java/com/shrtrl/analytics/service/AnalyticsService.java#L54">AnalyticsService.java:54–58</a></p>
+<table>
+<thead>
+<tr>
+<th>GET path</th>
+<th>Declared inputs</th>
+<th>Intended subject</th>
+<th>Current blocker beyond missing return / wrong service call</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/dashboard/live</code></td>
+<td>session</td>
+<td>Recent events</td>
+<td>Query has no user filter and uses nonexistent <code>TIMESTAMP</code>; it selects raw rows. <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L30">Controller:30–36</a>, <a href="docker/clickhouse/init/001_create_events.sql#L3">schema:3–11</a></td>
+</tr>
+<tr>
+<td><code>/dashboard</code></td>
+<td><code>from</code>, <code>to</code> (<code>LocalDate</code>); <code>page=0</code>, <code>size=20</code>; session</td>
+<td>Date range</td>
+<td>Uses nonexistent <code>date</code>, passes no <code>userid/from/to/size</code> values, and ignores <code>page</code>. <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L38">Controller:38–44</a></td>
+</tr>
+<tr>
+<td><code>/dashboard/day</code></td>
+<td><code>date</code>; <code>page=0</code>, <code>size=20</code>; session</td>
+<td>One day</td>
+<td>Nonexistent <code>date</code>, malformed predicate, no bound values or pagination. <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L47">Controller:47–53</a></td>
+</tr>
+<tr>
+<td><code>/dashboard/month</code></td>
+<td><code>to</code>; <code>page=0</code>, <code>size=20</code>; session</td>
+<td>Month</td>
+<td>Query refers to undeclared <code>date</code>; no month boundary is calculated. <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L56">Controller:56–62</a></td>
+</tr>
+<tr>
+<td><code>/dashboard/year</code></td>
+<td><code>to</code>; <code>page=0</code>, <code>size=20</code>; session</td>
+<td>Year</td>
+<td>Same query problem; no year boundary is calculated. <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L66">Controller:66–72</a></td>
+</tr>
+<tr>
+<td><code>/dashboard/trend</code></td>
+<td><code>from</code>, <code>to</code>; <code>page=0</code>, <code>size=20</code>; session</td>
+<td>Trend</td>
+<td>Empty body; no query at all. <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L75">Controller:75–80</a></td>
+</tr>
+<tr>
+<td><code>/countries</code></td>
+<td><code>page=0</code>, <code>size=20</code>; session</td>
+<td>Country breakdown</td>
+<td>Uses nonexistent <code>countries</code>, selects <code>*</code> with <code>GROUP BY shortcode</code>, and has no bound user or date range. <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L83">Controller:83–89</a>, <a href="docker/clickhouse/init/001_create_events.sql#L3">schema:3–11</a></td>
+</tr>
+<tr>
+<td><code>/states</code></td>
+<td><code>page=0</code>, <code>size=20</code>; session</td>
+<td>State breakdown</td>
+<td>Uses nonexistent <code>states</code> and the same grouping/parameter problems. <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L92">Controller:92–98</a></td>
+</tr>
+</tbody>
+</table>
+<p>Spring Security requires authentication for analytics paths, since only register/login, CSRF, and public URL resolution are permitted anonymously. Authentication is not enough for row authorization: the current live query does not constrain <code>userid</code>, and other routes read <code>USER_ID</code> but do not bind it to the query. <a href="src/main/java/com/shrtrl/config/SecurityConfig.java#L23">SecurityConfig.java:23–35</a>, <a href="src/main/java/com/shrtrl/auth/controller/AuthController.java#L95">AuthController.java:95–115</a>, <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L30">AnalyticsController.java:30–42</a></p>
+<h2 id="data-available-for-future-queries">Data available for future queries</h2>
+<p>The ClickHouse <code>events</code> table contains <code>event_id UUID</code>, <code>userid UUID</code>, <code>shortcode LowCardinality(String)</code>, <code>occurred_at DateTime64(3, 'UTC')</code>, <code>country</code>, <code>state</code>, <code>ip</code>, <code>user_agent</code>, and <code>referrer</code>. The latter five are strings and default to empty. It is a <code>MergeTree</code> partitioned weekly (<code>toMonday(occurred_at)</code>) and ordered by <code>(userid, shortcode, occurred_at, event_id)</code>. No <code>clicks</code>, <code>date</code>, <code>timestamp</code>, <code>countries</code>, <code>states</code>, <code>urlid</code>, destination URL, group ID, device class, browser, bot flag, or conversion field exists. <a href="docker/clickhouse/init/001_create_events.sql#L1">001_create_events.sql:1–15</a></p>
+<p>The Java <code>Event</code> has matching logical fields and maps to a PostgreSQL <code>analytics_outbox</code> table; the outbox is an <strong>ingestion queue</strong>, not the dashboard query source. <a href="src/main/java/com/shrtrl/analytics/entity/Event.java#L12">Event.java:12–42</a>, <a href="src/main/resources/db/migration/V2__create_analytics_outbox.sql#L1">V2__create_analytics_outbox.sql:1–15</a>, <a href="src/main/java/com/shrtrl/analytics/service/AnalyticsService.java#L26">AnalyticsService.java:26–40</a></p>
+<p>The URL database separately holds <code>urlid</code>, <code>longurl</code>, <code>shortcode</code>, <code>created_date</code>, and owning <code>userid</code>; group membership is in <code>group_url</code>. This supports URL inventory and could supply labels or group filters after deliberate cross-store query design. The ClickHouse events table itself has no group or destination key. <a href="src/main/java/com/shrtrl/urls/entity/Urls.java#L28">Urls.java:28–53</a>, <a href="src/main/resources/db/migration/V3__create_group_url.sql#L1">V3__create_group_url.sql:1–13</a></p>
+<h3 id="what-the-existing-columns-can-support-once-collection-and-api-querying-work">What the existing columns can support, once collection and API querying work</h3>
+<table>
+<thead>
+<tr>
+<th>Question</th>
+<th>Possible measure / grouping</th>
+<th>Caveat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>How many clicks?</td>
+<td><code>count()</code> by owner and time range; by <code>shortcode</code></td>
+<td>Count is event rows, subject to missing producer events and possible replay duplicates.</td>
+</tr>
+<tr>
+<td>Which links lead?</td>
+<td><code>GROUP BY shortcode</code>, rank by count</td>
+<td>No title/destination in ClickHouse; join or enrich from URL database.</td>
+</tr>
+<tr>
+<td>When do clicks happen?</td>
+<td>Hour/day/week/month buckets from <code>occurred_at</code>; recent minute</td>
+<td>Stored timestamp is UTC. Define user timezone and exclusive end boundary in API.</td>
+</tr>
+<tr>
+<td>Where are clicks from?</td>
+<td><code>GROUP BY country</code>, <code>state</code>, or both</td>
+<td>Fields may be empty; code shows no geolocation enrichment. State names can collide across countries.</td>
+</tr>
+<tr>
+<td>Who referred traffic?</td>
+<td><code>GROUP BY referrer</code>; parse host for domains</td>
+<td>Raw referrer can be empty or contain sensitive query strings. Domain rollup is derived, not stored.</td>
+</tr>
+<tr>
+<td>Which clients clicked?</td>
+<td>Group raw <code>user_agent</code>; derive browser/device/OS later</td>
+<td>No parsed device, browser, or bot dimensions exist.</td>
+</tr>
+<tr>
+<td>How many apparent unique visitors?</td>
+<td><code>uniqExact(ip)</code> or approximate unique IPs</td>
+<td>IP is not a reliable person identifier; NAT, proxies, changing IPs, and privacy limits apply. No visitor/session ID exists.</td>
+</tr>
+<tr>
+<td>Which events occurred?</td>
+<td>Raw event list with time and dimensions</td>
+<td>Sensitive fields require access control, pagination, and retention rules.</td>
+</tr>
+</tbody>
+</table>
+<p>Each item in this table is a <strong>schema-supported query idea</strong>, not an implemented HTTP endpoint. The raw event fields are enough for those calculations if events arrive; the current redirect path does not send them. <a href="src/main/java/com/shrtrl/urls/controller/UrlController.java#L70">UrlController.java:70–88</a></p>
+<h2 id="illustrative-direct-clickhouse-sql">Illustrative direct ClickHouse SQL</h2>
+<p>These examples are <strong>operator-level SQL sketches</strong>, not v1 API requests or verified executions. Replace the example UUID and UTC instants. Always scope by the authenticated owner in an application implementation. The half-open range <code>[from, to)</code> avoids double counting at adjacent boundaries.</p>
+<pre><code class="language-sql">-- Owner summary for a UTC time range
+SELECT count() AS clicks, uniqExact(shortcode) AS clicked_links
+FROM events
+WHERE userid = toUUID('11111111-1111-1111-1111-111111111111')
+  AND occurred_at &gt;= toDateTime64('2026-10-01 00:00:00', 3, 'UTC')
+  AND occurred_at &lt;  toDateTime64('2026-10-02 00:00:00', 3, 'UTC');
+
+-- Daily trend, including only days with rows
+SELECT toDate(occurred_at, 'UTC') AS day, count() AS clicks
+FROM events
+WHERE userid = toUUID('11111111-1111-1111-1111-111111111111')
+  AND occurred_at &gt;= toDateTime64('2026-10-01 00:00:00', 3, 'UTC')
+  AND occurred_at &lt;  toDateTime64('2026-11-01 00:00:00', 3, 'UTC')
+GROUP BY day ORDER BY day;
+
+-- Top links for the same owner (add the desired time predicate)
+SELECT shortcode, count() AS clicks
+FROM events
+WHERE userid = toUUID('11111111-1111-1111-1111-111111111111')
+GROUP BY shortcode ORDER BY clicks DESC, shortcode ASC LIMIT 20;
+
+-- Country / state breakdown, keeping state paired with country
+SELECT country, state, count() AS clicks
+FROM events
+WHERE userid = toUUID('11111111-1111-1111-1111-111111111111')
+GROUP BY country, state ORDER BY clicks DESC LIMIT 20;
+
+-- Last minute, sorted for a stable raw-event view
+SELECT event_id, shortcode, occurred_at, country, state, referrer
+FROM events
+WHERE userid = toUUID('11111111-1111-1111-1111-111111111111')
+  AND occurred_at &gt;= now64(3) - INTERVAL 1 MINUTE
+ORDER BY occurred_at DESC, event_id DESC LIMIT 20;
+</code></pre>
+<p>The schema supports similar groupings for <code>referrer</code> and <code>user_agent</code>, and <code>uniqExact(ip)</code> for unique IP counts. An application should pass typed/bound values through the service's parameter map rather than interpolate user input. <a href="src/main/java/com/shrtrl/analytics/service/AnalyticsService.java#L54">AnalyticsService.java:54–58</a></p>
+<h2 id="key-limits-and-gaps-for-v1-planning">Key limits and gaps for v1 planning</h2>
+<ol>
+<li><strong>No click producer:</strong> <code>EventStorage</code> is injected into <code>UrlController</code>, but its only call in the redirect method is commented out. Cache entries hold only the long URL, so a cache hit also lacks the owner ID needed for an event. <a href="src/main/java/com/shrtrl/urls/controller/UrlController.java#L38">UrlController.java:38–45</a>, <a href="src/main/java/com/shrtrl/urls/controller/UrlController.java#L70">UrlController.java:70–84</a>, <a href="src/main/java/com/shrtrl/urls/service/UrlCacheService.java">UrlCacheService.java</a></li>
+<li><strong>No analytics HTTP contract:</strong> No successful <code>ResponseEntity</code> body, DTO, validation, size cap, stable pagination, or documented timezone behavior is implemented. <code>page</code> is never used. <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L30">AnalyticsController.java:30–102</a></li>
+<li><strong>Authorization risk:</strong> Every future query must bind the session's <code>USER_ID</code>; the live SQL currently spans all users. <a href="src/main/java/com/shrtrl/auth/controller/AuthController.java#L109">AuthController.java:109–114</a>, <a href="src/main/java/com/shrtrl/analytics/controller/AnalyticsController.java#L30">AnalyticsController.java:30–42</a></li>
+<li><strong>Data quality:</strong> The transport workers send batches to ClickHouse, but current <code>MergeTree</code> has no event-ID deduplication guarantee. Retried deliveries can inflate counts; empty geo/referrer/client fields also produce unattributed buckets. <a href="src/main/java/com/shrtrl/analytics/Transport/Redis/RedisWorker.java#L63">RedisWorker.java:63–76</a>, <a href="src/main/java/com/shrtrl/analytics/Transport/Postgres/OutboxWorker.java#L37">OutboxWorker.java:37–48</a>, <a href="docker/clickhouse/init/001_create_events.sql#L7">001_create_events.sql:7–15</a></li>
+<li><strong>Unsupported metrics:</strong> Unique people, sessions, conversions, destination performance after edits, bot-filtered clicks, campaign attribution, and group analytics cannot be stated as native event measures from this schema. They need definitions, extra collection or joins, and in some cases new fields. <a href="docker/clickhouse/init/001_create_events.sql#L1">001_create_events.sql:1–15</a>, <a href="src/main/java/com/shrtrl/urls/entity/Urls.java#L28">Urls.java:28–53</a></li>
+</ol>
+<h2 id="practical-v1-query-surface-to-implement">Practical v1 query surface to implement</h2>
+<p>The smallest coherent API would expose an owner-scoped summary, a time series, a per-link ranking, country/state breakdowns, referrer breakdown, and recent events, all with a defined UTC or account-timezone window and bounded results. This is a <strong>recommendation inferred from available columns</strong>, not a statement that these endpoints exist. It requires a working producer, corrected controller/service calls and SQL, response DTOs, owner filtering, and clear handling of late or duplicate events. The current query primitive can execute SQL with a parameter map after those pieces are connected. <a href="src/main/java/com/shrtrl/analytics/service/AnalyticsService.java#L54">AnalyticsService.java:54–58</a></p>
+<h2 id="verification-and-scope">Verification and scope</h2>
+<p>Findings were checked against the controller, query service, redirect, schema, transport, security, and URL model source in this workspace. No analytics API runtime or ClickHouse query was executed. Because the controller has evident source-level compilation blockers, the report does not infer HTTP behavior from route annotations alone. Existing uncommitted code was preserved; only this report and its HTML companion were added.</p></main></div></body></html>
