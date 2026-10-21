@@ -1,6 +1,10 @@
 # Ignore Markdown files except README.md, including uppercase extensions.
 *.[mM][dD]
 ![rR][eE][aA][dD][mM][eE].[mM][dD]
+
+# Local HTML reports and exports.
+*.[hH][tT][mM][lL]
+*.[hH][tT][mM]
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
