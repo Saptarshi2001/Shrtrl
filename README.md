@@ -348,6 +348,4 @@ context-load test that requires configured services. Compilation alone does not
 establish that this broader suite passes; the isolated E2E command above is the
 recommended flow check.
 
-## License
 
-[MIT](LICENSE) — Copyright 2026 Saptarshi Dutta.
