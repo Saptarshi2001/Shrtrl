@@ -1,4 +1,6 @@
-HELP.md
+# Ignore Markdown files except README.md, including uppercase extensions.
+*.[mM][dD]
+![rR][eE][aA][dD][mM][eE].[mM][dD]
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
@@ -32,7 +34,3 @@ build/
 ### VS Code ###
 .vscode/
 
-# Local code-review notes
-/users-module-review.md
-/urls-module-review.md
-/groups-module-review.md

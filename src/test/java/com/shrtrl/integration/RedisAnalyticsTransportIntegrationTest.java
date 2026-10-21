@@ -20,8 +20,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.shrtrl.analytics.Transport.Redis.RedisEventInsertion;
-import com.shrtrl.analytics.Transport.Redis.RedisWorker;
+import com.shrtrl.transport.Redis.RedisEventInsertion;
+import com.shrtrl.transport.Redis.RedisWorker;
 import com.shrtrl.models.Event;
 import com.shrtrl.services.AnalyticsService;
 

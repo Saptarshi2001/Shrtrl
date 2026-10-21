@@ -1,7 +1,6 @@
 package com.shrtrl.api;
 
 import java.time.OffsetDateTime;
-import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +16,7 @@ import com.shrtrl.DTOs.UpdateLongUrl;
 import com.shrtrl.DTOs.UrlCreateRequest;
 import com.shrtrl.DTOs.UrlCreateResponse;
 import com.shrtrl.models.Urls;
+import com.shrtrl.interfaces.urls.Resolveurl;
 import com.shrtrl.services.UrlCacheService;
 import com.shrtrl.services.UrlService;
 
@@ -41,14 +41,19 @@ class UrlApiMappingTest {
 
     private UrlService urlService;
     private UrlCacheService urlCacheService;
+    private com.shrtrl.services.GeoLocationService geoLocationService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         urlService = mock(UrlService.class);
         urlCacheService = mock(UrlCacheService.class);
+        geoLocationService = mock(com.shrtrl.services.GeoLocationService.class);
+        when(geoLocationService.lookup(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(com.shrtrl.DTOs.GeoLocation.UNKNOWN);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new UrlController(urlService, urlCacheService))
+                .standaloneSetup(new UrlController(urlService, urlCacheService,
+                        mock(com.shrtrl.transport.EventStorage.class), geoLocationService))
                 .setControllerAdvice(new ApiExceptionHandler())
                 .build();
     }
@@ -63,7 +68,7 @@ class UrlApiMappingTest {
                 createdAt,
                 true
         );
-        when(urlService.shortenurl(request, USER_ID)).thenReturn(response);
+        when(urlService.shortenurl(request, USER_ID)).thenReturn(new com.shrtrl.interfaces.urls.UrlShortenResult.UrlShortened(response));
 
         mockMvc.perform(post("/api/v1/urls")
                         .session(authenticatedSession())
@@ -101,7 +106,12 @@ class UrlApiMappingTest {
     }
 
     @Test
-    void getShortCodeRedirectsFromCacheWithoutQueryingDatabase() throws Exception {
+    void getShortCodeRedirectsFromCacheAndLooksUpOwnerForEvent() throws Exception {
+        Urls url = new Urls("https://example.com/from-cache", "abc123", OffsetDateTime.now());
+        var owner = new com.shrtrl.models.Users("Owner", "owner@example.com", "password");
+        owner.setUserId(USER_ID);
+        url.setUser(owner);
+        when(urlService.findByShortCode("abc123")).thenReturn(new Resolveurl.shortcodeFound(url));
         when(urlCacheService.get("abc123"))
                 .thenReturn("https://example.com/from-cache");
 
@@ -112,7 +122,7 @@ class UrlApiMappingTest {
                         "https://example.com/from-cache"
                 ));
 
-        verify(urlService, never()).findByShortCode("abc123");
+        verify(urlService).findByShortCode("abc123");
     }
 
     @Test
@@ -123,7 +133,10 @@ class UrlApiMappingTest {
                 "abc123",
                 OffsetDateTime.parse("2026-07-26T10:15:30Z")
         );
-        when(urlService.findByShortCode("abc123")).thenReturn(Optional.of(url));
+        var owner = new com.shrtrl.models.Users("Owner", "owner@example.com", "password");
+        owner.setUserId(USER_ID);
+        url.setUser(owner);
+        when(urlService.findByShortCode("abc123")).thenReturn(new Resolveurl.shortcodeFound(url));
 
         mockMvc.perform(get("/api/v1/urls/{shortcode}", "abc123"))
                 .andExpect(status().isFound())
@@ -141,7 +154,7 @@ class UrlApiMappingTest {
     @Test
     void getShortCodeReturnsNotFoundWhenCacheAndDatabaseMiss() throws Exception {
         when(urlCacheService.get("missing")).thenReturn(null);
-        when(urlService.findByShortCode("missing")).thenReturn(Optional.empty());
+        when(urlService.findByShortCode("missing")).thenReturn(new Resolveurl.shortcodeNotFound());
 
         mockMvc.perform(get("/api/v1/urls/{shortcode}", "missing"))
                 .andExpect(status().isNotFound())
@@ -151,7 +164,7 @@ class UrlApiMappingTest {
     @Test
     void putShortCodeUpdatesOwnedUrlAndCache() throws Exception {
         UpdateLongUrl request = new UpdateLongUrl("https://example.com/new");
-        when(urlService.updateLongurl("abc123", request, USER_ID)).thenReturn(true);
+        when(urlService.updateLongurl("abc123", request, USER_ID)).thenReturn(new com.shrtrl.interfaces.urls.UpdateUrl.UrlUpdated());
 
         mockMvc.perform(put("/api/v1/urls/{shortcode}", "abc123")
                         .session(authenticatedSession())
@@ -169,7 +182,7 @@ class UrlApiMappingTest {
     @Test
     void putShortCodeReturnsNotFoundWhenUserDoesNotOwnUrl() throws Exception {
         UpdateLongUrl request = new UpdateLongUrl("https://example.com/new");
-        when(urlService.updateLongurl("abc123", request, USER_ID)).thenReturn(false);
+        when(urlService.updateLongurl("abc123", request, USER_ID)).thenReturn(new com.shrtrl.interfaces.urls.UpdateUrl.NoShortCodeFound());
 
         mockMvc.perform(put("/api/v1/urls/{shortcode}", "abc123")
                         .session(authenticatedSession())
@@ -184,7 +197,7 @@ class UrlApiMappingTest {
 
     @Test
     void deleteShortCodeDeletesOwnedUrlAndCachedValue() throws Exception {
-        when(urlService.deleteurl("abc123", USER_ID)).thenReturn(true);
+        when(urlService.deleteurl("abc123", USER_ID)).thenReturn(new com.shrtrl.interfaces.urls.DeleteUrl.UrlDeleted());
 
         mockMvc.perform(delete("/api/v1/urls/{shortcode}", "abc123")
                         .session(authenticatedSession()))
@@ -196,7 +209,7 @@ class UrlApiMappingTest {
 
     @Test
     void deleteShortCodeReturnsNotFoundWhenUserDoesNotOwnUrl() throws Exception {
-        when(urlService.deleteurl("abc123", USER_ID)).thenReturn(false);
+        when(urlService.deleteurl("abc123", USER_ID)).thenReturn(new com.shrtrl.interfaces.urls.DeleteUrl.NoShortCodeFound());
 
         mockMvc.perform(delete("/api/v1/urls/{shortcode}", "abc123")
                         .session(authenticatedSession()))

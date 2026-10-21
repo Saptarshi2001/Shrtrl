@@ -3,6 +3,7 @@ package com.shrtrl.DTOs;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Positive;
 import org.hibernate.validator.constraints.URL;
 
 public record UrlCreateRequest(
@@ -13,6 +14,12 @@ public record UrlCreateRequest(
                 regexp = "(?i)^https?://.*",
                 message = "longUrl must use http or https"
         )
-        String longUrl
+        String longUrl,
+
+        @Positive(message = "groupId must be positive")
+        Integer groupId
 ) {
+    public UrlCreateRequest(String longUrl) {
+        this(longUrl, null);
+    }
 }

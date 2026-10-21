@@ -4,8 +4,6 @@ import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 import org.hibernate.validator.constraints.Length;
 
-import com.shrtrl.models.Users;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -42,7 +40,6 @@ public class Groups {
             allocationSize = 1
     )
     @Column(name = "groupid", nullable = false)
-    @Length(max=6)
     private int groupId;
 
     @Column(name = "groupname", nullable = false, length = 20)

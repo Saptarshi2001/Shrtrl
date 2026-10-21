@@ -1,5 +1,5 @@
 
-package com.shrtrl.analytics.Transport;
+package com.shrtrl.transport;
 
 import com.shrtrl.models.Event;
 

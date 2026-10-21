@@ -16,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -24,10 +23,10 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import com.shrtrl.analytics.Transport.EventStorage;
-import com.shrtrl.analytics.Transport.Postgres.OutboxRepository;
-import com.shrtrl.analytics.Transport.Postgres.OutboxWorker;
-import com.shrtrl.analytics.Transport.Postgres.PostgresEventInsertion;
+import com.shrtrl.transport.EventStorage;
+import com.shrtrl.transport.Postgres.OutboxRepository;
+import com.shrtrl.transport.Postgres.OutboxWorker;
+import com.shrtrl.transport.Postgres.PostgresEventInsertion;
 import com.shrtrl.models.Event;
 import com.shrtrl.services.AnalyticsService;
 
@@ -94,15 +93,13 @@ class PostgresAnalyticsTransportIntegrationTest {
     }
 
     @Test
-    void repositoryReturnsTheOldestEventsFirstAndHonoursThePageSize() {
+    void repositoryLocksTheOldestEventsFirstAndHonoursTheBatchSize() {
         Event newest = eventAt("2026-09-06T10:00:00Z", "newest");
         Event oldest = eventAt("2026-09-06T08:00:00Z", "oldest");
         Event middle = eventAt("2026-09-06T09:00:00Z", "middle");
         outboxRepository.saveAllAndFlush(List.of(newest, oldest, middle));
 
-        List<Event> batch = outboxRepository.findAllByOrderByOccurredAtAsc(
-                PageRequest.of(0, 2)
-        );
+        List<Event> batch = outboxRepository.lockNextBatch(2);
 
         assertThat(batch)
                 .extracting(Event::getEventId)

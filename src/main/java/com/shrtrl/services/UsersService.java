@@ -4,12 +4,19 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.dao.DataAccessException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.shrtrl.DTOs.UserProfileResponse;
 import com.shrtrl.DTOs.UserRequest;
+import com.shrtrl.interfaces.users.DeleteAccount;
+import com.shrtrl.interfaces.users.ShowProfile;
+import com.shrtrl.interfaces.users.UpdateAccount;
 import com.shrtrl.models.Users;
 import com.shrtrl.queries.UserQueries;
 
@@ -89,22 +96,41 @@ return "Password did not matched";
     }
 
     @Transactional(readOnly = true)
-    public Optional<UserProfileResponse> showProfile(UUID id) {
-        return userdbAccess.findById(id).map(user -> new UserProfileResponse(
-                user.getUserName(),
-                user.getEmail()
-        ));
+    public ShowProfile showProfile(UUID id) {
+        try {
+            Optional<Users> existingUser = userdbAccess.findById(id);
+            if (existingUser.isEmpty()) {
+                return new ShowProfile.NoUserFound();
+            }
+            Users user = existingUser.get();
+            return new ShowProfile.ProfileFound(new UserProfileResponse(
+                    user.getUserName(), user.getEmail()));
+        } catch (DataAccessException | TransactionException exception) {
+            markTransactionForRollback();
+            return new ShowProfile.DatabaseFailure(exception);
+        } catch (RuntimeException exception) {
+            markTransactionForRollback();
+            return new ShowProfile.RuntimeFailure(exception);
+        }
     }
 
     @Transactional
-    public boolean updateAccount(UUID id, UserRequest request) {
-        Optional<Users> containerusr = userdbAccess.findById(id);
-        if (containerusr.isEmpty()) {
-            return false;
+    public UpdateAccount updateAccount(UUID id, UserRequest request) {
+        try {
+            Optional<Users> containerusr = userdbAccess.findById(id);
+            if (containerusr.isEmpty()) {
+                return new UpdateAccount.NoUserFound();
+            }
+            updateuser(containerusr.get(), request);
+            userdbAccess.flush();
+            return new UpdateAccount.AccountUpdated();
+        } catch (DataAccessException | TransactionException exception) {
+            markTransactionForRollback();
+            return new UpdateAccount.DatabaseFailure(exception);
+        } catch (RuntimeException exception) {
+            markTransactionForRollback();
+            return new UpdateAccount.RuntimeFailure(exception);
         }
-        Users user = containerusr.get();
-        Users updateduser=updateuser(user,request);
-        return true;
     }
 
     private Users updateuser(Users user,UserRequest request)
@@ -117,13 +143,27 @@ return "Password did not matched";
 
 
     @Transactional
-    public boolean deleteAccount(UUID id) {
-        Optional<Users> containerusr = userdbAccess.findById(id);
-        if (containerusr.isEmpty()) {
-            return false;
+    public DeleteAccount deleteAccount(UUID id) {
+        try {
+            Optional<Users> containerusr = userdbAccess.findById(id);
+            if (containerusr.isEmpty()) {
+                return new DeleteAccount.NoUserFound();
+            }
+            userdbAccess.delete(containerusr.get());
+            userdbAccess.flush();
+            return new DeleteAccount.AccountDeleted();
+        } catch (DataAccessException | TransactionException exception) {
+            markTransactionForRollback();
+            return new DeleteAccount.DatabaseFailure(exception);
+        } catch (RuntimeException exception) {
+            markTransactionForRollback();
+            return new DeleteAccount.RuntimeFailure(exception);
         }
+    }
 
-        userdbAccess.delete(containerusr.get());
-        return true;
+    private void markTransactionForRollback() {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+        }
     }
 }

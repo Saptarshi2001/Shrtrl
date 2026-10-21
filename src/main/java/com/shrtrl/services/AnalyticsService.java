@@ -53,6 +53,14 @@ public class AnalyticsService
         }
     }
 
+    public List<GenericRecord> showanalytics(UUID userId)
+    {
+      return queryForUser("""
+                SELECT *
+                FROM events
+                WHERE userid = {userId:UUID}
+                """, userId);  
+    }
     public List<GenericRecord> clicksByCountry(UUID userId)
     {
         return queryForUser("""

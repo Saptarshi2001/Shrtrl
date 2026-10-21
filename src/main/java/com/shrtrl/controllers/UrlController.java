@@ -1,10 +1,9 @@
 package com.shrtrl.controllers;
 
 import java.net.URI;
-import java.util.Optional;
+import java.time.Instant;
 import java.util.UUID;
 
-import org.springframework.context.annotation.Bean;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,11 +21,18 @@ import com.shrtrl.DTOs.UpdateLongUrl;
 import com.shrtrl.DTOs.UpdateUrlResponse;
 import com.shrtrl.DTOs.UrlCreateRequest;
 import com.shrtrl.DTOs.UrlCreateResponse;
-import com.shrtrl.models.Urls;
+import com.shrtrl.models.Event;
 import com.shrtrl.services.UrlCacheService;
 import com.shrtrl.services.UrlService;
-import com.shrtrl.analytics.Transport.EventStorage;
+import com.shrtrl.services.GeoLocationService;
+import com.shrtrl.interfaces.urls.UrlShortenResult;
+import com.shrtrl.interfaces.urls.UpdateUrl;
+import com.shrtrl.interfaces.urls.DeleteUrl;
+import com.shrtrl.interfaces.urls.Resolveurl.shortcodeFound;
+import com.shrtrl.interfaces.urls.Resolveurl.shortcodeNotFound;
+import com.shrtrl.transport.EventStorage;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 
@@ -38,11 +44,14 @@ public class UrlController {
     private final UrlService urlService;
     private final UrlCacheService urlCacheService;
     private final EventStorage eventstorage;
+    private final GeoLocationService geoLocationService;
 
-    public UrlController(UrlService urlService, UrlCacheService urlCacheService,EventStorage eventstorage) {
+    public UrlController(UrlService urlService, UrlCacheService urlCacheService,
+            EventStorage eventstorage, GeoLocationService geoLocationService) {
         this.urlService = urlService;
         this.urlCacheService = urlCacheService;
         this.eventstorage=eventstorage;
+        this.geoLocationService = geoLocationService;
         
     }
 
@@ -56,40 +65,75 @@ public class UrlController {
             return unauthorized();
         }
 
-        try {
-            UrlCreateResponse result = urlService.shortenurl(request, userId);
-            urlCacheService.set(result.shortCode(), result.longUrl());
-            return ResponseEntity.status(HttpStatus.CREATED).body(result);
-        } catch (DataAccessException exception) {
-            return databaseError(exception);
-        } catch (RuntimeException exception) {
-            return runtimeError(exception);
+        UrlShortenResult result = urlService.shortenurl(request, userId);
+        switch (result) {
+            case UrlShortenResult.UrlShortened shortened -> {
+                UrlCreateResponse response = shortened.response();
+                urlCacheService.set(response.shortCode(), response.longUrl());
+                return ResponseEntity.status(HttpStatus.CREATED).body(response);
+            }
+            case UrlShortenResult.NoUserFound notfound -> {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                        new ApiErrorResponse(404, "Not Found", "No user found"));
+            }
+            case UrlShortenResult.NoGroupFound notfound -> {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                        new ApiErrorResponse(404, "Not Found", "group does not exist"));
+            }
+            case UrlShortenResult.DatabaseFailure dbfailure -> {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                        new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
+            }
+            case UrlShortenResult.RuntimeFailure runtimefailure -> {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                        new ApiErrorResponse(500, "Internal Server Error", "Url could not be shortened"));
+            }
         }
     }
 
     @GetMapping("/{shortcode}")
-    public ResponseEntity<?> resolveUrl(@PathVariable String shortcode) {
+    public ResponseEntity<?> resolveUrl(HttpServletRequest request, @PathVariable("shortcode") String shortcode) {
         try {
-            //eventstorage.insertEvent(event);
-            String longUrl = urlCacheService.get(shortcode);
-
-            if (longUrl == null) {
-                Optional<Urls> url = urlService.findByShortCode(shortcode);
-                if (url.isEmpty()) {
-                    return notFound("url does not exist");
+            // The current cache stores only the destination; the event also needs its owner.
+            var result = urlService.findByShortCode(shortcode);
+            switch (result) {
+                case shortcodeNotFound notfound -> {
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                            new ApiErrorResponse(404, "Not Found", "url does not exist"));
                 }
+                case shortcodeFound found -> {
+                    var url = found.url();
+                    String longUrl = urlCacheService.get(shortcode);
+                    if (longUrl == null) {
+                        longUrl = url.getlongUrl();
+                        urlCacheService.set(shortcode, longUrl);
+                    }
 
-                longUrl = url.get().getlongUrl();
-                urlCacheService.set(shortcode, longUrl);
+                    String ip = request.getRemoteAddr();
+                    var location = geoLocationService.lookup(ip);
+                    Event event = new Event(
+                            UUID.randomUUID(),
+                            url.getUser().getUserId(),
+                            shortcode,
+                            Instant.now(),
+                            location.country(),
+                            location.state(),
+                            ip,
+                            request.getHeader("User-Agent"),
+                            request.getHeader("Referer"));
+                    eventstorage.insertEvent(event);
+
+                    return ResponseEntity.status(HttpStatus.FOUND)
+                            .location(URI.create(longUrl))
+                            .build();
+                }
             }
-
-            return ResponseEntity.status(HttpStatus.FOUND)
-                    .location(URI.create(longUrl))
-                    .build();
         } catch (DataAccessException exception) {
-            return databaseError(exception);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
         } catch (RuntimeException exception) {
-            return runtimeError(exception);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    new ApiErrorResponse(500, "Internal Server Error", "Url could not be resolved"));
         }
     }
 
@@ -103,21 +147,25 @@ public class UrlController {
             return unauthorized();
         }
 
-        try {
-            if (!urlService.updateLongurl(shortcode, request, userId)) {
-                return notFound("url does not exist");
+        UpdateUrl result = urlService.updateLongurl(shortcode, request, userId);
+        switch (result) {
+            case UpdateUrl.UrlUpdated updated -> {
+                urlCacheService.set(shortcode, request.longUrl());
+                return ResponseEntity.ok(new UpdateUrlResponse(
+                        request.longUrl(), shortcode, "Url updated"));
             }
-
-            urlCacheService.set(shortcode, request.longUrl());
-            return ResponseEntity.ok(new UpdateUrlResponse(
-                    request.longUrl(),
-                    shortcode,
-                    "Url updated"
-            ));
-        } catch (DataAccessException exception) {
-            return databaseError(exception);
-        } catch (RuntimeException exception) {
-            return runtimeError(exception);
+            case UpdateUrl.NoShortCodeFound notfound -> {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                        new ApiErrorResponse(404, "Not Found", "url does not exist"));
+            }
+            case UpdateUrl.DatabaseFailure dbfailure -> {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                        new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
+            }
+            case UpdateUrl.RuntimeFailure runtimefailure -> {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                        new ApiErrorResponse(500, "Internal Server Error", "Url could not be updated"));
+            }
         }
     }
 
@@ -130,17 +178,24 @@ public class UrlController {
             return unauthorized();
         }
 
-        try {
-            if (!urlService.deleteurl(shortcode, userId)) {
-                return notFound("url does not exist");
+        DeleteUrl result = urlService.deleteurl(shortcode, userId);
+        switch (result) {
+            case DeleteUrl.UrlDeleted deleted -> {
+                urlCacheService.delete(shortcode);
+                return ResponseEntity.ok("Url deleted successfully");
             }
-
-            urlCacheService.delete(shortcode);
-            return ResponseEntity.ok("Url deleted successfully");
-        } catch (DataAccessException exception) {
-            return databaseError(exception);
-        } catch (RuntimeException exception) {
-            return runtimeError(exception);
+            case DeleteUrl.NoShortCodeFound notfound -> {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                        new ApiErrorResponse(404, "Not Found", "url does not exist"));
+            }
+            case DeleteUrl.DatabaseFailure dbfailure -> {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                        new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
+            }
+            case DeleteUrl.RuntimeFailure runtimefailure -> {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                        new ApiErrorResponse(500, "Internal Server Error", "Url could not be deleted"));
+            }
         }
     }
 
@@ -159,29 +214,6 @@ public class UrlController {
                 ));
     }
 
-    private ResponseEntity<ApiErrorResponse> notFound(String message) {
-        HttpStatus status = HttpStatus.NOT_FOUND;
-        return ResponseEntity.status(status)
-                .body(new ApiErrorResponse(status.value(), "Not Found", message));
-    }
-
-    private ResponseEntity<ApiErrorResponse> databaseError(DataAccessException exception) {
-        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
-        return ResponseEntity.status(status)
-                .body(new ApiErrorResponse(
-                        status.value(),
-                        "DataAccessException",
-                        exception.getMessage()
-                ));
-    }
-
-    private ResponseEntity<ApiErrorResponse> runtimeError(RuntimeException exception) {
-        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
-        return ResponseEntity.status(status)
-                .body(new ApiErrorResponse(
-                        status.value(),
-                        "RuntimeException",
-                        exception.getMessage()
-                ));
-    }
+    
+    
 }

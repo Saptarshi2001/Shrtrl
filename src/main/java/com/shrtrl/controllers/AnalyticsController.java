@@ -9,9 +9,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import com.clickhouse.client.api.query.GenericRecord;
-
-import com.clickhouse.client.api.query.GenericRecord;
-import com.clickhouse.client.api.query.QueryResponse;
 import com.shrtrl.services.AnalyticsService;
 
 import jakarta.servlet.http.HttpSession;
@@ -28,74 +25,64 @@ public AnalyticsController(AnalyticsService analyticsclient)
     this.analyticsclient=analyticsclient;
 }
 @GetMapping("/dashboard/live")
-public ResponseEntity<?> liveAnalytics(HttpSession session)
+public ResponseEntity<List<GenericRecord>> liveAnalytics(HttpSession session)
 {
-UUID userid=session.getAttribute("USER_ID");        
+UUID userid=(UUID) session.getAttribute("USER_ID");
 List<GenericRecord> response=analyticsclient.eventsInLastHour(userid);
-
-
+return ResponseEntity.ok(response);
 }
 
 @GetMapping("/dashboard")
-public ResponseEntity<?> showDashBoard(HttpSession session,@RequestParam LocalDate from,@RequestParam LocalDate to,@RequestParam(defaultValue = "0") int page,@RequestParam(defaultValue = "20") int size )
+public ResponseEntity<List<GenericRecord>> showDashBoard(HttpSession session,@RequestParam LocalDate from,@RequestParam LocalDate to,@RequestParam(defaultValue = "0") int page,@RequestParam(defaultValue = "20") int size )
 {
 UUID userid=(UUID) session.getAttribute("USER_ID");
-List<GenericRecord> response=
-
+List<GenericRecord> response=analyticsclient.showanalytics(userid);
+return ResponseEntity.ok(response);
 }
 
 
 @GetMapping("/dashboard/day")
-public ResponseEntity<?> showAnalyticsDay(HttpSession session,@RequestParam LocalDate date,@RequestParam(defaultValue = "0") int page,@RequestParam(defaultValue = "20") int size )
+public ResponseEntity<List<GenericRecord>> showAnalyticsDay(HttpSession session,@RequestParam LocalDate date,@RequestParam(defaultValue = "0") int page,@RequestParam(defaultValue = "20") int size )
 {
         UUID userid=(UUID) session.getAttribute("USER_ID");
 List<GenericRecord> response=analyticsclient.clicksToday(userid);
-
+return ResponseEntity.ok(response);
 }
 
 
 @GetMapping("/dashboard/month")
-public ResponseEntity<?> showAnalyticsMonth(HttpSession session,@RequestParam LocalDate to,@RequestParam(defaultValue = "0") int page,@RequestParam(defaultValue = "20") int size )
+public ResponseEntity<List<GenericRecord>> showAnalyticsMonth(HttpSession session,@RequestParam LocalDate to,@RequestParam(defaultValue = "0") int page,@RequestParam(defaultValue = "20") int size )
 {
         UUID userid=(UUID) session.getAttribute("USER_ID");
 List<GenericRecord> response=analyticsclient.clicksThisMonth(userid);
-
+return ResponseEntity.ok(response);
 }
 
 
 
 @GetMapping("/dashboard/year")
-public ResponseEntity<?> showAnalyticsYear(HttpSession session,@RequestParam LocalDate to,@RequestParam(defaultValue = "0") int page,@RequestParam(defaultValue = "20") int size )
+public ResponseEntity<List<GenericRecord>> showAnalyticsYear(HttpSession session,@RequestParam LocalDate to,@RequestParam(defaultValue = "0") int page,@RequestParam(defaultValue = "20") int size )
 {
         UUID userid=(UUID) session.getAttribute("USER_ID");
 List<GenericRecord> response=analyticsclient.clicksThisYear(userid);
-
+return ResponseEntity.ok(response);
 }
-
-
-@GetMapping("/dashboard/trend")
-public ResponseEntity<?> showTrends(HttpSession session,@RequestParam LocalDate from,@RequestParam LocalDate to,@RequestParam(defaultValue = "0") int page,@RequestParam(defaultValue = "20") int size )
-{
-
-
-}
-
 
 @GetMapping("/countries")
-public ResponseEntity<?> showCountry(HttpSession session,@RequestParam(defaultValue = "0") int page,@RequestParam(defaultValue = "20") int size )
+public ResponseEntity<List<GenericRecord>> showCountry(HttpSession session,@RequestParam(defaultValue = "0") int page,@RequestParam(defaultValue = "20") int size )
 {
         UUID userid=(UUID) session.getAttribute("USER_ID");
 List<GenericRecord> response=analyticsclient.clicksByCountry(userid);
-
+return ResponseEntity.ok(response);
 }
 
 
 @GetMapping("/states")
-public ResponseEntity<?> showState(HttpSession session,@RequestParam(defaultValue = "0") int page,@RequestParam(defaultValue = "20") int size )
+public ResponseEntity<List<GenericRecord>> showState(HttpSession session,@RequestParam(defaultValue = "0") int page,@RequestParam(defaultValue = "20") int size )
 {
         UUID userid=(UUID) session.getAttribute("USER_ID");
 List<GenericRecord> response=analyticsclient.clicksByCountryAndState(userid);
-
+return ResponseEntity.ok(response);
 }
 
 

@@ -9,10 +9,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.shrtrl.analytics.Transport.EventStorage;
-import com.shrtrl.analytics.Transport.Postgres.OutboxRepository;
-import com.shrtrl.analytics.Transport.Postgres.PostgresEventInsertion;
-import com.shrtrl.analytics.Transport.Redis.RedisEventInsertion;
+import com.shrtrl.transport.EventStorage;
+import com.shrtrl.transport.Postgres.OutboxRepository;
+import com.shrtrl.transport.Postgres.PostgresEventInsertion;
+import com.shrtrl.transport.Redis.RedisEventInsertion;
 
 import io.lettuce.core.api.sync.RedisCommands;
 

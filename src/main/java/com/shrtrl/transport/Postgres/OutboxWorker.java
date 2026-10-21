@@ -1,10 +1,9 @@
-package com.shrtrl.analytics.Transport.Postgres;
+package com.shrtrl.transport.Postgres;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -32,18 +31,19 @@ public class OutboxWorker {
 
     @Transactional
     @Scheduled(
-            fixedRate = 5000
+            fixedDelayString = "${app.analytics.outbox.poll-delay-ms:5000}",
+            initialDelayString = "${app.analytics.outbox.initial-delay-ms:5000}"
     )
     public int insertToClickHouse() {
-        List<Event> events = outbox.findAllByOrderByOccurredAtAsc(
-                PageRequest.of(0, BATCH_SIZE)
-        );
+        // Hold the row locks until delivery and deletion commit together in PostgreSQL.
+        List<Event> events = outbox.lockNextBatch(BATCH_SIZE);
 
         if (events.isEmpty()) {
             return 0;
         }
 
         analyticsService.insertEvents(events);
+        // A failed insertion throws before deletion, leaving this batch for the next poll.
         outbox.deleteAllInBatch(events);
         return 1;
     }

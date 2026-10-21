@@ -95,6 +95,12 @@ class SecurityWebIntegrationTest {
     private UrlCacheService urlCacheService;
 
     @MockitoBean
+    private com.shrtrl.services.GeoLocationService geoLocationService;
+
+    @MockitoBean
+    private com.shrtrl.transport.EventStorage eventStorage;
+
+    @MockitoBean
     private GroupService groupService;
 
     @Test
@@ -135,7 +141,7 @@ class SecurityWebIntegrationTest {
                 "alice@example.com",
                 "correct horse battery staple"
         );
-        when(authService.authenticate(requestBody)).thenReturn(Optional.of(user));
+        when(authService.authenticate(requestBody)).thenReturn(new com.shrtrl.interfaces.auth.LoginResult.AuthenticatedUser(user));
 
         mockMvc.perform(post("/api/v1/auth/login")
                         .cookie(csrf.cookie())
@@ -187,7 +193,7 @@ class SecurityWebIntegrationTest {
                 OffsetDateTime.parse("2026-07-26T10:15:30Z"),
                 true
         );
-        when(urlService.shortenurl(request, USER_ID)).thenReturn(response);
+        when(urlService.shortenurl(request, USER_ID)).thenReturn(new com.shrtrl.interfaces.urls.UrlShortenResult.UrlShortened(response));
 
         mockMvc.perform(post("/api/v1/urls")
                         .with(user("alice@example.com"))
@@ -283,6 +289,8 @@ class SecurityWebIntegrationTest {
 
     @Test
     void authenticatedGroupCreateWithRealCsrfTokenSucceeds() throws Exception {
+        when(groupService.createGroup(USER_ID, "work"))
+                .thenReturn(new com.shrtrl.interfaces.groups.CreateGroup.GroupCreated());
         CsrfCredentials csrf = fetchCsrfCredentials();
 
         mockMvc.perform(post("/api/v1/groups")

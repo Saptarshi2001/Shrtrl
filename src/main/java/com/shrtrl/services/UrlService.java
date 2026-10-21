@@ -4,14 +4,24 @@ import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.shrtrl.DTOs.UpdateLongUrl;
 import com.shrtrl.DTOs.UrlCreateRequest;
 import com.shrtrl.DTOs.UrlCreateResponse;
+import com.shrtrl.interfaces.urls.DeleteUrl;
+import com.shrtrl.interfaces.urls.Resolveurl;
+import com.shrtrl.interfaces.urls.UpdateUrl;
+import com.shrtrl.interfaces.urls.UrlShortenResult;
 import com.shrtrl.models.Urls;
 import com.shrtrl.models.Users;
+import com.shrtrl.models.Groups;
+import com.shrtrl.queries.GroupQueries;
 import com.shrtrl.queries.UrlQueries;
 import com.shrtrl.queries.UserQueries;
 
@@ -19,14 +29,18 @@ import com.shrtrl.queries.UserQueries;
 public class UrlService {
     private final UrlQueries urldbAccess;
     private final UserQueries userdbAccess;
-
-    public UrlService(UrlQueries urldbAccess, UserQueries userdbAccess) {
+    private final GroupQueries groupdbaccess;
+    public UrlService(UrlQueries urldbAccess, UserQueries userdbAccess, GroupQueries groupdbaccess) {
         this.userdbAccess = userdbAccess;
         this.urldbAccess = urldbAccess;
+        this.groupdbaccess = groupdbaccess;
     }
 
-    public Optional<Urls> findByShortCode(String shortCode) {
-        return urldbAccess.findByShortCode(shortCode);
+    public Resolveurl findByShortCode(String shortCode) {
+
+        return urldbAccess.findByShortCode(shortCode)
+                .<Resolveurl>map(Resolveurl.shortcodeFound::new)
+                .orElseGet(Resolveurl.shortcodeNotFound::new);
     } // a type for inability to find short code 
 
     private String shorten(int id) {
@@ -41,50 +55,96 @@ public class UrlService {
     }
 
     @Transactional
-    public boolean updateLongurl(String shortcode, UpdateLongUrl request, UUID userId) {
-        Optional<Urls> containerurls = urldbAccess.findByShortCodeAndUser_UserId(
-                shortcode,
-                userId
-        );
-        if (containerurls.isEmpty()) {
-            return false;
+    public UpdateUrl updateLongurl(String shortcode, UpdateLongUrl request, UUID userId) {
+        try {
+            Optional<Urls> containerurls = urldbAccess.findByShortCodeAndUser_UserId(
+                    shortcode,
+                    userId
+            );
+            if (containerurls.isEmpty()) {
+                return new UpdateUrl.NoShortCodeFound();
+            }
+    
+            Urls url = containerurls.get();
+            url.setlongUrl(request.longUrl());
+            urldbAccess.flush();
+            return new UpdateUrl.UrlUpdated();
+        
+        } catch (DataAccessException | TransactionException exception) {
+            markTransactionForRollback();
+            return new UpdateUrl.DatabaseFailure(exception);
+        } catch (RuntimeException exception) {
+            markTransactionForRollback();
+            return new UpdateUrl.RuntimeFailure(exception);
         }
-
-        Urls url = containerurls.get();
-        url.setlongUrl(request.longUrl());
-        return true;
-    }// a type for no shortcode,a type for db failure, a type for updateurl
+    }
 
     @Transactional
-    public boolean deleteurl(String shortcode, UUID userId) {
-        Optional<Urls> url = urldbAccess.findByShortCodeAndUser_UserId(
-                shortcode,
-                userId
-        );
-        if (url.isEmpty()) {
-            return false;
+    public DeleteUrl deleteurl(String shortcode, UUID userId) {
+        try {
+            Optional<Urls> url = urldbAccess.findByShortCodeAndUser_UserId(
+                    shortcode,
+                    userId
+            );
+            if (url.isEmpty()) {
+                return new DeleteUrl.NoShortCodeFound();
+            }
+    
+            urldbAccess.delete(url.get());
+            urldbAccess.flush();
+            return new DeleteUrl.UrlDeleted();
+        
+        } catch (DataAccessException | TransactionException exception) {
+            markTransactionForRollback();
+            return new DeleteUrl.DatabaseFailure(exception);
+        } catch (RuntimeException exception) {
+            markTransactionForRollback();
+            return new DeleteUrl.RuntimeFailure(exception);
         }
-
-        urldbAccess.delete(url.get());
-        return true;
-    }// a type for no shortcode,a type for db failure, a type for deleteurl
+    }
 
     @Transactional
-    public UrlCreateResponse shortenurl(UrlCreateRequest request, UUID userId) {
-        Users user = userdbAccess.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+    public UrlShortenResult shortenurl(UrlCreateRequest request, UUID userId) {
+        try {
+            Optional<Users> existingUser = userdbAccess.findById(userId);
+            if (existingUser.isEmpty())
+            {
+                return new UrlShortenResult.NoUserFound();
+            }
+            Users user = existingUser.get();
+    
+            String longUrl = request.longUrl();
+            OffsetDateTime createdAt = OffsetDateTime.now();
+            Urls url = new Urls(longUrl, null, createdAt);
+            url.setUser(user);
+            if (request.groupId() != null) {
+                Optional<Groups> selectedGroup = groupdbaccess.findByGroupIdAndUser_UserId(
+                        request.groupId(), userId);
+                if (selectedGroup.isEmpty()) {
+                    return new UrlShortenResult.NoGroupFound();
+                }
+                url.setGroup(selectedGroup.get());
+            }
+            urldbAccess.saveAndFlush(url);
+    
+            String shortCode = shorten(url.getUrlId());
+            url.setShortCode(shortCode);
+            urldbAccess.saveAndFlush(url);
+    
+            return new UrlShortenResult.UrlShortened(new UrlCreateResponse(longUrl, shortCode, createdAt, true));
+        
+        } catch (DataAccessException | TransactionException exception) {
+            markTransactionForRollback();
+            return new UrlShortenResult.DatabaseFailure(exception);
+        } catch (RuntimeException exception) {
+            markTransactionForRollback();
+            return new UrlShortenResult.RuntimeFailure(exception);
+        }
+    } // a type for no id,a type for db failure, a type for shortenurl
 
-        String longUrl = request.longUrl();
-        OffsetDateTime createdAt = OffsetDateTime.now();
-
-        Urls url = new Urls(longUrl, null, createdAt);
-        url.setUser(user);
-        urldbAccess.saveAndFlush(url);
-
-        String shortCode = shorten(url.getUrlId());
-        url.setShortCode(shortCode);
-        urldbAccess.save(url);
-
-        return new UrlCreateResponse(longUrl, shortCode, createdAt, true);
-    } // a type for no id,a type for db failure, a type for updateurl
+    private void markTransactionForRollback() {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+        }
+    }
 }

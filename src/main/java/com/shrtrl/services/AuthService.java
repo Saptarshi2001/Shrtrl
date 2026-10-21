@@ -1,15 +1,19 @@
 package com.shrtrl.services;
 
-import java.util.Optional;
-
+import org.springframework.dao.DataAccessException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.TransactionException;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.shrtrl.DTOs.CreateUserRequest;
 import com.shrtrl.DTOs.LoginRequest;
 import com.shrtrl.models.Users;
 import com.shrtrl.queries.UserQueries;
+import com.shrtrl.interfaces.auth.CreateAccountResult;
+import com.shrtrl.interfaces.auth.LoginResult;
 
 @Service
 public class AuthService {
@@ -21,26 +25,50 @@ public class AuthService {
     }
 
     @Transactional
-    public boolean createAccount(CreateUserRequest request)
+    public CreateAccountResult createAccount(CreateUserRequest request)
     {
-        if (userRepository.existsByUserName(request.username())
-                    || userRepository.existsByEmail(request.email())) {
-                return false;
+        String encrpassword=encodepassword(request);
+        if (userRepository.existsByUserName(request.username()))
+        {
+        return new CreateAccountResult.UserAlreadyExists();
+        }
+         else if (userRepository.existsByEmail(request.email())) {
+                return new CreateAccountResult.UserAlreadyExists();
             }
-            String password=request.password();
-            String encrpassword=passwordencoder.encode(password);
             Users user = new Users(request.username(), request.email(), encrpassword);
             userRepository.save(user);
-            return true;
+            return new CreateAccountResult.AccountCreated();
     }// a type for no user found, a type for database failure, a type for authorized user
 
+    private String encodepassword(CreateUserRequest request)
+    {
+      String password=request.password();
+      String encrpassword=passwordencoder.encode(password);  
+      return encrpassword;
+    }
     @Transactional(readOnly = true)
-    public Optional<Users> authenticate(LoginRequest request) {
-        return userRepository.findByEmail(request.email())
+    public LoginResult authenticate(LoginRequest request) {
+        try {
+            return userRepository.findByEmail(request.email())
                 .filter(user -> passwordencoder.matches(
                         request.password(),
                         user.getPassword()
-                ));
+                ))
+                .<LoginResult>map(LoginResult.AuthenticatedUser::new)
+                .orElseGet(LoginResult.InvalidCredentials::new);
+        } catch (DataAccessException | TransactionException exception) {
+            markTransactionForRollback();
+            return new LoginResult.DatabaseFailure(exception);
+        } catch (RuntimeException exception) {
+            markTransactionForRollback();
+            return new LoginResult.RuntimeFailure(exception);
+        }
+    }
+
+    private void markTransactionForRollback() {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+        }
     }
 // a type for authenticated users, a type for no user found, a type for database failure
     

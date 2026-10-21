@@ -16,6 +16,7 @@ import com.shrtrl.controllers.AuthController;
 import com.shrtrl.DTOs.CreateUserRequest;
 import com.shrtrl.DTOs.LoginRequest;
 import com.shrtrl.services.AuthService;
+import com.shrtrl.interfaces.auth.CreateAccountResult;
 import com.shrtrl.models.Users;
 import com.shrtrl.services.UsersService;
 
@@ -51,7 +52,7 @@ class AuthApiMappingTest {
                 "alice",
                 "alice@example.com",
                 "correct horse battery staple"
-        ))).thenReturn(true);
+        ))).thenReturn(new CreateAccountResult.AccountCreated());
 
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -93,7 +94,7 @@ class AuthApiMappingTest {
                 "alice@example.com",
                 "correct horse battery staple"
         );
-        when(authService.createAccount(request)).thenReturn(false);
+        when(authService.createAccount(request)).thenReturn(new CreateAccountResult.UserAlreadyExists());
 
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -118,7 +119,7 @@ class AuthApiMappingTest {
                 "alice@example.com",
                 "correct horse battery staple"
         );
-        when(authService.authenticate(requestBody)).thenReturn(Optional.of(user));
+        when(authService.authenticate(requestBody)).thenReturn(new com.shrtrl.interfaces.auth.LoginResult.AuthenticatedUser(user));
 
         MockHttpSession session = new MockHttpSession();
         mockMvc.perform(post("/api/v1/auth/login")
@@ -144,7 +145,7 @@ class AuthApiMappingTest {
                 "alice@example.com",
                 "incorrect password"
         );
-        when(authService.authenticate(requestBody)).thenReturn(Optional.empty());
+        when(authService.authenticate(requestBody)).thenReturn(new com.shrtrl.interfaces.auth.LoginResult.InvalidCredentials());
 
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

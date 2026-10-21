@@ -1,10 +1,10 @@
-package com.shrtrl.analytics.Transport.Redis;
+package com.shrtrl.transport.Redis;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Component;
 import jakarta.transaction.Transactional;
-import com.shrtrl.analytics.Transport.EventStorage;
+import com.shrtrl.transport.EventStorage;
 import com.shrtrl.models.Event;
 import io.lettuce.core.api.sync.RedisCommands;
 import com.fasterxml.jackson.databind.ObjectMapper;

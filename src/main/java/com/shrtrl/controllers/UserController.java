@@ -1,7 +1,6 @@
 package com.shrtrl.controllers;
 
 import java.util.UUID;
-import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,15 +19,17 @@ import org.springframework.web.bind.annotation.RestController;
 import com.shrtrl.DTOs.ApiErrorResponse;
 import com.shrtrl.DTOs.ApiMessageResponse;
 import com.shrtrl.DTOs.ChangePasswordRequest;
-import com.shrtrl.DTOs.UserProfileResponse;
 import com.shrtrl.DTOs.UserRequest;
+import com.shrtrl.interfaces.users.UpdateAccount;
+import com.shrtrl.interfaces.users.DeleteAccount;
+import com.shrtrl.interfaces.users.ShowProfile;
 import com.shrtrl.services.UsersService;
 
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 
 @RestController
-@RequestMapping("/api/v1/users")
+@RequestMapping("/api/v1/account")
 public class UserController {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UserController.class);
@@ -39,7 +40,7 @@ public class UserController {
         this.userservice=userservice;
     }
 
-    @PutMapping("/me")
+    @PutMapping
     public ResponseEntity<?> updateAccount(@Valid @RequestBody UserRequest request, HttpSession session) {
         try {
             if (request == null || request.username() == null || request.username().isBlank()
@@ -51,13 +52,24 @@ public class UserController {
             if (id == null) {
                 return unauthorized();
             }
-            boolean updateAccountResult=userservice.updateAccount(id, request);
-            if(updateAccountResult== true)
-            {
-            return ResponseEntity.ok(new ApiMessageResponse("Account updated"));
+            UpdateAccount result = userservice.updateAccount(id, request);
+            switch (result) {
+                case UpdateAccount.AccountUpdated updated -> {
+                    return ResponseEntity.ok(new ApiMessageResponse("Account updated"));
+                }
+                case UpdateAccount.NoUserFound notFound -> {
+                    return ResponseEntity.status(404).body(new ApiErrorResponse(404, "Not Found", "user does not exist"));
+                }
+                case UpdateAccount.DatabaseFailure failure -> {
+                    if (failure.cause() instanceof DataIntegrityViolationException) {
+                        return ResponseEntity.status(409).body(new ApiErrorResponse(409, "Conflict", "username or email already exists"));
+                    }
+                    return internalServerError("updating user account", failure.cause());
+                }
+                case UpdateAccount.RuntimeFailure failure -> {
+                    return internalServerError("updating user account", failure.cause());
+                }
             }
-            HttpStatus status=HttpStatus.NOT_FOUND;
-            return ResponseEntity.status(status).body(new ApiErrorResponse(status.value(), "Not Found", "user does not exist"));
 
         } catch (DataIntegrityViolationException ex) {
             HttpStatus status = HttpStatus.CONFLICT;
@@ -69,22 +81,30 @@ public class UserController {
         }
     }
 
-    @DeleteMapping("/me")
+    @DeleteMapping
     public ResponseEntity<?> deleteAccount(HttpSession session) {
         try {
             UUID id = authenticatedUserId(session);
             if (id == null) {
                 return unauthorized();
             }
-            boolean deleteAccountResult=userservice.deleteAccount(id);
-            if(deleteAccountResult==true)
-            {
-            SecurityContextHolder.clearContext();
-            session.invalidate();
-            return ResponseEntity.ok(new ApiMessageResponse("Account deleted"));
+            DeleteAccount result = userservice.deleteAccount(id);
+            switch (result) {
+                case DeleteAccount.AccountDeleted deleted -> {
+                    SecurityContextHolder.clearContext();
+                    session.invalidate();
+                    return ResponseEntity.ok(new ApiMessageResponse("Account deleted"));
+                }
+                case DeleteAccount.NoUserFound notFound -> {
+                    return ResponseEntity.status(404).body(new ApiErrorResponse(404, "Not Found", "user does not exist"));
+                }
+                case DeleteAccount.DatabaseFailure failure -> {
+                    return internalServerError("deleting user account", failure.cause());
+                }
+                case DeleteAccount.RuntimeFailure failure -> {
+                    return internalServerError("deleting user account", failure.cause());
+                }
             }
-            HttpStatus status = HttpStatus.NOT_FOUND;
-            return ResponseEntity.status(status).body(new ApiErrorResponse(status.value(), "Not Found", "user does not exist"));
 
         } catch (DataAccessException ex) {
             return internalServerError("deleting user account", ex);
@@ -95,7 +115,7 @@ public class UserController {
     }
 
 
-    @PutMapping("/me/password")
+    @PutMapping("/password")
     public ResponseEntity<?> resetPassword(@RequestBody ChangePasswordRequest request, HttpSession session) {
         try {
             if (request == null || request.oldPassword() == null || request.newPassword() == null
@@ -133,7 +153,7 @@ public class UserController {
         }
     }
 
-    @GetMapping("/me/profile")
+    @GetMapping
     public ResponseEntity<?> showProfile(HttpSession session)
     {
         try{
@@ -141,12 +161,21 @@ public class UserController {
         if (userid == null) {
             return unauthorized();
         }
-        Optional<UserProfileResponse> showProfileResult = userservice.showProfile(userid);
-        if (showProfileResult.isPresent()) {
-            return ResponseEntity.ok(showProfileResult.get());
+        ShowProfile result = userservice.showProfile(userid);
+        switch (result) {
+            case ShowProfile.ProfileFound found -> {
+                return ResponseEntity.ok(found.profile());
+            }
+            case ShowProfile.NoUserFound notFound -> {
+                return ResponseEntity.status(404).body(new ApiErrorResponse(404, "Not Found", "user does not exist"));
+            }
+            case ShowProfile.DatabaseFailure failure -> {
+                return internalServerError("loading user profile", failure.cause());
+            }
+            case ShowProfile.RuntimeFailure failure -> {
+                return internalServerError("loading user profile", failure.cause());
+            }
         }
-        HttpStatus status=HttpStatus.NOT_FOUND;
-        return ResponseEntity.status(status).body(new ApiErrorResponse(status.value(), "Not Found", "user does not exist"));
 
     }catch (DataAccessException ex) {
             return internalServerError("loading user profile", ex);

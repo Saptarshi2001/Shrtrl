@@ -7,8 +7,6 @@ import org.hibernate.annotations.OnDeleteAction;
 import org.hibernate.validator.constraints.Length;
 import org.springframework.format.annotation.DateTimeFormat;
 
-import com.shrtrl.models.Users;
-
 import jakarta.persistence.Basic;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -33,9 +31,8 @@ import jakarta.validation.constraints.Pattern;
 public class Urls {
 
     @Id
-    @GeneratedValue(strategy=GenerationType.UUID)
+    @GeneratedValue(strategy=GenerationType.IDENTITY)
     @Column(name="urlid",nullable=false,unique=true)
-    @Length(max=6)
     private int urlId;
     
     @Basic
@@ -60,6 +57,10 @@ public class Urls {
     @OnDelete(action = OnDeleteAction.CASCADE)
     @JoinColumn(name="userid",nullable=false)
     private Users user;
+
+    @ManyToOne(optional = true)
+    @JoinColumn(name = "groupid", nullable = true)
+    private Groups group;
     
     protected Urls() {
     }
@@ -110,5 +111,13 @@ public class Urls {
 
     public void setUser(Users user) {
         this.user = user;
+    }
+
+    public Groups getGroup() {
+        return group;
+    }
+
+    public void setGroup(Groups group) {
+        this.group = group;
     }
 }

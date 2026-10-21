@@ -24,6 +24,8 @@ import com.shrtrl.DTOs.ApiErrorResponse;
 import com.shrtrl.DTOs.CreateUserRequest;
 import com.shrtrl.DTOs.LoginRequest;
 import com.shrtrl.services.AuthService;
+import com.shrtrl.interfaces.auth.CreateAccountResult;
+import com.shrtrl.interfaces.auth.LoginResult;
 import com.shrtrl.models.Users;
 import com.shrtrl.services.UsersService;
 
@@ -50,71 +52,74 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<?> createAccount(@Valid @RequestBody CreateUserRequest request) {
-        try {
-            if (!authService.createAccount(request)) {
-                HttpStatus status = HttpStatus.CONFLICT;
-                return ResponseEntity.status(status)
-                        .body(new ApiErrorResponse(
-                                status.value(),
-                                "Conflict",
-                                "username or email already exists"
-                        ));
+        CreateAccountResult result;
+        
+            result = authService.createAccount(request);
+         
+        switch (result) {
+                case CreateAccountResult.AccountCreated created -> {
+                    return ResponseEntity.status(HttpStatus.CREATED).body("User created");
+                }
+                case CreateAccountResult.UserAlreadyExists duplicate -> {
+                    return ResponseEntity.status(HttpStatus.CONFLICT).body(
+                            new ApiErrorResponse(409, "Conflict", "username or email already exists"));
+                }
+                case CreateAccountResult.NoUserFound notfound -> {
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                            new ApiErrorResponse(404, "Not Found", "No user found"));
+                }
+                case CreateAccountResult.DatabaseFailure dbfailure -> {
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                            new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
+                }
             }
-
-            return ResponseEntity.status(HttpStatus.CREATED).body("User created");
-        } catch (DataIntegrityViolationException exception) {
-            HttpStatus status = HttpStatus.CONFLICT;
-            return ResponseEntity.status(status)
-                    .body(new ApiErrorResponse(
-                            status.value(),
-                            "Conflict",
-                            "username or email already exists"
-                    ));
-        } catch (DataAccessException exception) {
-            return databaseError(exception);
-        }
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(
             HttpServletRequest servletRequest,
             @Valid @RequestBody LoginRequest loginRequest) {
-        try {
-            Optional<Users> authenticatedUser = authService.authenticate(loginRequest);
+        LoginResult result;
+        
+            result = authService.authenticate(loginRequest);
+        
 
-            if (authenticatedUser.isEmpty()) {
-                HttpStatus status = HttpStatus.UNAUTHORIZED;
-                return ResponseEntity.status(status)
-                        .body(new ApiErrorResponse(
-                                status.value(),
-                                "Unauthorized",
-                                "email or password is incorrect"
-                        ));
+        switch (result) {
+            case LoginResult.InvalidCredentials invalid -> {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
+                        new ApiErrorResponse(401, "Unauthorized", "email or password is incorrect"));
             }
-
-            Users user = authenticatedUser.get();
-            HttpSession session = servletRequest.getSession();
-            servletRequest.changeSessionId();
-
-            SecurityContext context = SecurityContextHolder.createEmptyContext();
-            context.setAuthentication(
-                    UsernamePasswordAuthenticationToken.authenticated(
-                            user.getEmail(),
-                            null,
-                            List.of()
-                    )
-            );
-
-            SecurityContextHolder.setContext(context);
-            session.setAttribute(
-                    HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
-                    context
-            );
-            session.setAttribute("USER_ID", user.getUserId());
-
-            return ResponseEntity.ok("Logged in");
-        } catch (DataAccessException exception) {
-            return databaseError(exception);
+            case LoginResult.DatabaseFailure failure -> {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                        new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
+            }
+            case LoginResult.RuntimeFailure failure -> {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                        new ApiErrorResponse(500, "Internal Server Error", "Login could not be completed"));
+            }
+            case LoginResult.AuthenticatedUser authenticated -> {
+                Users user = authenticated.user();
+                HttpSession session = servletRequest.getSession();
+                servletRequest.changeSessionId();
+    
+                SecurityContext context = SecurityContextHolder.createEmptyContext();
+                context.setAuthentication(
+                        UsernamePasswordAuthenticationToken.authenticated(
+                                user.getEmail(),
+                                null,
+                                List.of()
+                        )
+                );
+    
+                SecurityContextHolder.setContext(context);
+                session.setAttribute(
+                        HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+                        context
+                );
+                session.setAttribute("USER_ID", user.getUserId());
+    
+                return ResponseEntity.ok("Logged in");
+            }
         }
     }
 
@@ -122,7 +127,7 @@ public class AuthController {
     public ResponseEntity<?> googleLoginSuccess(
             @AuthenticationPrincipal OAuth2User googleUser,
             HttpSession session) {
-        try {
+        {
             if (googleUser == null) {
                 HttpStatus status = HttpStatus.UNAUTHORIZED;
                 return ResponseEntity.status(status)
@@ -157,9 +162,7 @@ public class AuthController {
 
             session.setAttribute("USER_ID", user.get().getUserId());
             return ResponseEntity.ok("Logged in");
-        } catch (DataAccessException exception) {
-            return databaseError(exception);
-        }
+        } 
     }
 
     @PostMapping("/logout")
@@ -169,13 +172,4 @@ public class AuthController {
         return ResponseEntity.ok("Logged out");
     }
 
-    private ResponseEntity<ApiErrorResponse> databaseError(DataAccessException exception) {
-        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
-        return ResponseEntity.status(status)
-                .body(new ApiErrorResponse(
-                        status.value(),
-                        "DataAccessException",
-                        exception.getMessage()
-                ));
-    }
 }

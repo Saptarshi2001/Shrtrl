@@ -1,4 +1,4 @@
-package com.shrtrl.analytics.Transport.Redis;
+package com.shrtrl.transport.Redis;
 
 import java.time.Duration;
 import java.util.List;

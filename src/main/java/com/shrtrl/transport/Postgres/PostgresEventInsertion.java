@@ -1,11 +1,11 @@
 
-package com.shrtrl.analytics.Transport.Postgres;
+package com.shrtrl.transport.Postgres;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import com.shrtrl.analytics.Transport.EventStorage;
+import com.shrtrl.transport.EventStorage;
 import com.shrtrl.models.Event;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @ConditionalOnProperty(
@@ -25,6 +25,6 @@ public class PostgresEventInsertion implements EventStorage
     @Transactional
     public void insertEvent(Event event)
     {
-        outbox.save(event);
+        outbox.saveAndFlush(event);
     }
 }

@@ -41,7 +41,6 @@ public class Event {
     private String userAgent;
 
     @Column(name = "referrer", columnDefinition = "TEXT", updatable = false)
-    @Length(max=10)
     private String referrer;
 
     protected Event() {

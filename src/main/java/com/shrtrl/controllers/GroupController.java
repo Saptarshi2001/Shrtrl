@@ -4,7 +4,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.dao.DataAccessException;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,8 +19,11 @@ import com.shrtrl.DTOs.ApiErrorResponse;
 import com.shrtrl.DTOs.ApiMessageResponse;
 import com.shrtrl.DTOs.GroupCreateResponse;
 import com.shrtrl.DTOs.GroupRequest;
+import com.shrtrl.DTOs.GroupDetailsResponse;
 import com.shrtrl.DTOs.UpdateGroupResponse;
-import com.shrtrl.models.Groups;
+import com.shrtrl.interfaces.groups.CreateGroup;
+import com.shrtrl.interfaces.groups.DeleteGroup;
+import com.shrtrl.interfaces.groups.UpdateGroup;
 import com.shrtrl.services.GroupService;
 
 import jakarta.servlet.http.HttpSession;
@@ -47,18 +49,29 @@ public class GroupController {
             return unauthorized();
         }
 
-        try {
-            groupService.createGroup(userId, request.groupName());
-            return ResponseEntity.status(HttpStatus.CREATED).body(
-                    new GroupCreateResponse(
-                            request.groupName(),
-                            "Group created successfully"
-                    )
-            );
-        } catch (DataIntegrityViolationException exception) {
-            return duplicateGroupName();
-        } catch (DataAccessException exception) {
-            return databaseError();
+        CreateGroup group = groupService.createGroup(userId, request.groupName());
+        switch (group) {
+            case CreateGroup.GroupCreated created -> {
+                return ResponseEntity.status(HttpStatus.CREATED).body(
+                        new GroupCreateResponse(request.groupName(), "Group created"));
+            }
+
+            case CreateGroup.DuplicateGroup duplicate -> {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(
+                        new ApiErrorResponse(409, "Conflict", "a group with this name already exists"));
+            }
+            case CreateGroup.NoUserFound notfound -> {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                        new ApiErrorResponse(404, "Not Found", "No user found"));
+            }
+            case CreateGroup.DatabaseFailure dbfailure -> {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                        new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
+            }
+            case CreateGroup.RuntimeFailure runtimefailure -> {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                        new ApiErrorResponse(500, "Internal Server Error", "Group could not be created"));
+            }
         }
     }
 
@@ -74,23 +87,24 @@ public class GroupController {
             return unauthorized();
         }
 
-        try {
-            if (!groupService.updateGroup(
-                    groupId,
-                    userId,
-                    request.groupName()
-            )) {
-                return groupNotFound();
+        UpdateGroup group = groupService.updateGroup(groupId, userId, request.groupName());
+        switch (group) {
+            case UpdateGroup.GroupUpdated updated -> {
+                return ResponseEntity.ok(
+                        new UpdateGroupResponse(request.groupName(), "Group updated"));
             }
-
-            return ResponseEntity.ok(new UpdateGroupResponse(
-                    request.groupName(),
-                    "Group updated successfully"
-            ));
-        } catch (DataIntegrityViolationException exception) {
-            return duplicateGroupName();
-        } catch (DataAccessException exception) {
-            return databaseError();
+            case UpdateGroup.NoGroupFound notfound -> {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                        new ApiErrorResponse(404, "Not Found", "group does not exist"));
+            }
+            case UpdateGroup.DatabaseFailure dbfailure -> {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                        new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
+            }
+            case UpdateGroup.RuntimeFailure runtimefailure -> {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                        new ApiErrorResponse(500, "Internal Server Error", "Group could not be updated"));
+            }
         }
     }
 
@@ -103,15 +117,23 @@ public class GroupController {
             return unauthorized();
         }
 
-        try {
-            if (!groupService.deleteGroup(groupId, userId)) {
-                return groupNotFound();
+        DeleteGroup group = groupService.deleteGroup(groupId, userId);
+        switch (group) {
+            case DeleteGroup.GroupDeleted deleted -> {
+                return ResponseEntity.ok(new ApiMessageResponse("Group deleted successfully"));
             }
-            return ResponseEntity.ok(new ApiMessageResponse(
-                    "Group deleted successfully"
-            ));
-        } catch (DataAccessException exception) {
-            return databaseError();
+            case DeleteGroup.NoGroupFound notfound -> {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                        new ApiErrorResponse(404, "Not Found", "group does not exist"));
+            }
+            case DeleteGroup.DatabaseFailure dbfailure -> {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                        new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
+            }
+            case DeleteGroup.RuntimeFailure runtimefailure -> {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                        new ApiErrorResponse(500, "Internal Server Error", "Group could not be deleted"));
+            }
         }
     }
 
@@ -123,20 +145,21 @@ public class GroupController {
         if (userId == null) {
             return unauthorized();
         }
-
         try {
-            Optional<Groups> group = groupService.findGroup(groupId, userId);
+            Optional<GroupDetailsResponse> group = groupService.findGroupDetails(groupId, userId);
             if (group.isEmpty()) {
-                return groupNotFound();
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                        new ApiErrorResponse(404, "Not Found", "group does not exist"));
             }
-
-            return ResponseEntity.ok(new UpdateGroupResponse(
-                    group.get().getGroupName(),
-                    "Group info"
-            ));
+            return ResponseEntity.ok(group.get());
         } catch (DataAccessException exception) {
-            return databaseError();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
+        } catch (RuntimeException exception) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    new ApiErrorResponse(500, "Internal Server Error", "Group could not be loaded"));
         }
+        
     }
 
     private UUID authenticatedUserId(HttpSession session) {
@@ -153,30 +176,5 @@ public class GroupController {
         ));
     }
 
-    private ResponseEntity<ApiErrorResponse> groupNotFound() {
-        HttpStatus status = HttpStatus.NOT_FOUND;
-        return ResponseEntity.status(status).body(new ApiErrorResponse(
-                status.value(),
-                "Not Found",
-                "group does not exist"
-        ));
-    }
 
-    private ResponseEntity<ApiErrorResponse> duplicateGroupName() {
-        HttpStatus status = HttpStatus.CONFLICT;
-        return ResponseEntity.status(status).body(new ApiErrorResponse(
-                status.value(),
-                "Conflict",
-                "a group with this name already exists"
-        ));
-    }
-
-    private ResponseEntity<ApiErrorResponse> databaseError() {
-        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
-        return ResponseEntity.status(status).body(new ApiErrorResponse(
-                status.value(),
-                "Internal Server Error",
-                "group operation could not be completed"
-        ));
-    }
 }

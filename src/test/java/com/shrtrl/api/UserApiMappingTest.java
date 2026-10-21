@@ -1,7 +1,9 @@
 package com.shrtrl.api;
 
 import java.util.UUID;
-import java.util.Optional;
+import com.shrtrl.interfaces.users.UpdateAccount;
+import com.shrtrl.interfaces.users.DeleteAccount;
+import com.shrtrl.interfaces.users.ShowProfile;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,9 +52,9 @@ class UserApiMappingTest {
     @Test
     void updateUsesAuthenticatedSessionUserId() throws Exception {
         UserRequest request = new UserRequest("new-name", "new@example.com");
-        when(usersService.updateAccount(USER_ID, request)).thenReturn(true);
+        when(usersService.updateAccount(USER_ID, request)).thenReturn(new UpdateAccount.AccountUpdated());
 
-        mockMvc.perform(put("/api/v1/users/me")
+        mockMvc.perform(put("/api/v1/account")
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -69,7 +71,7 @@ class UserApiMappingTest {
 
     @Test
     void updateRejectsMissingSessionUserId() throws Exception {
-        mockMvc.perform(put("/api/v1/users/me")
+        mockMvc.perform(put("/api/v1/account")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -85,9 +87,9 @@ class UserApiMappingTest {
 
     @Test
     void deleteUsesAuthenticatedSessionUserId() throws Exception {
-        when(usersService.deleteAccount(USER_ID)).thenReturn(true);
+        when(usersService.deleteAccount(USER_ID)).thenReturn(new DeleteAccount.AccountDeleted());
 
-        mockMvc.perform(delete("/api/v1/users/me")
+        mockMvc.perform(delete("/api/v1/account")
                         .session(authenticatedSession()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Account deleted"));
@@ -110,7 +112,7 @@ class UserApiMappingTest {
         when(usersService.changePassword(USER_ID, "old-password", "new-password"))
                 .thenReturn(true);
 
-        mockMvc.perform(put("/api/v1/users/me/password")
+        mockMvc.perform(put("/api/v1/account/password")
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -135,7 +137,7 @@ class UserApiMappingTest {
         when(usersService.changePassword(USER_ID, "wrong-password", "new-password"))
                 .thenReturn(false);
 
-        mockMvc.perform(put("/api/v1/users/me/password")
+        mockMvc.perform(put("/api/v1/account/password")
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -154,13 +156,13 @@ class UserApiMappingTest {
     @Test
     void profileUsesAuthenticatedSessionUserId() throws Exception {
         when(usersService.showProfile(USER_ID)).thenReturn(
-                Optional.of(new UserProfileResponse(
+                new ShowProfile.ProfileFound(new UserProfileResponse(
                         "alice",
                         "alice@example.com"
                 ))
         );
 
-        mockMvc.perform(get("/api/v1/users/me/profile")
+        mockMvc.perform(get("/api/v1/account")
                         .session(authenticatedSession()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userName").value("alice"))
@@ -177,3 +179,4 @@ class UserApiMappingTest {
         return session;
     }
 }
+

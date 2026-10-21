@@ -15,6 +15,10 @@ import com.shrtrl.ApiExceptionHandler;
 import com.shrtrl.controllers.GroupController;
 import com.shrtrl.models.Groups;
 import com.shrtrl.services.GroupService;
+import com.shrtrl.DTOs.GroupDetailsResponse;
+import com.shrtrl.interfaces.groups.CreateGroup;
+import com.shrtrl.interfaces.groups.UpdateGroup;
+import com.shrtrl.interfaces.groups.DeleteGroup;
 
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -49,6 +53,8 @@ class GroupApiMappingTest {
 
     @Test
     void createUsesSessionOwnerAndValidatedRequestDto() throws Exception {
+        when(groupService.createGroup(USER_ID, "work"))
+                .thenReturn(new CreateGroup.GroupCreated());
         mockMvc.perform(post("/api/v1/groups")
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -115,7 +121,7 @@ class GroupApiMappingTest {
     @Test
     void updateIsOwnerScoped() throws Exception {
         when(groupService.updateGroup(GROUP_ID, USER_ID, "renamed"))
-                .thenReturn(true);
+                .thenReturn(new UpdateGroup.GroupUpdated());
 
         mockMvc.perform(put("/api/v1/groups/{groupId}", GROUP_ID)
                         .session(authenticatedSession())
@@ -146,7 +152,8 @@ class GroupApiMappingTest {
 
     @Test
     void deleteIsOwnerScoped() throws Exception {
-        when(groupService.deleteGroup(GROUP_ID, USER_ID)).thenReturn(true);
+        when(groupService.deleteGroup(GROUP_ID, USER_ID))
+                .thenReturn(new DeleteGroup.GroupDeleted());
 
         mockMvc.perform(delete("/api/v1/groups/{groupId}", GROUP_ID)
                         .session(authenticatedSession()))
@@ -159,21 +166,20 @@ class GroupApiMappingTest {
 
     @Test
     void readIsOwnerScopedAndForeignGroupLooksMissing() throws Exception {
-        when(groupService.findGroup(GROUP_ID, USER_ID))
+        when(groupService.findGroupDetails(GROUP_ID, USER_ID))
                 .thenReturn(Optional.empty());
 
         mockMvc.perform(get("/api/v1/groups/{groupId}", GROUP_ID)
                         .session(authenticatedSession()))
                 .andExpect(status().isNotFound());
 
-        verify(groupService).findGroup(GROUP_ID, USER_ID);
+        verify(groupService).findGroupDetails(GROUP_ID, USER_ID);
     }
 
     @Test
     void readReturnsOwnedGroup() throws Exception {
-        Groups group = new Groups("work", null);
-        when(groupService.findGroup(GROUP_ID, USER_ID))
-                .thenReturn(Optional.of(group));
+        when(groupService.findGroupDetails(GROUP_ID, USER_ID))
+                .thenReturn(Optional.of(new GroupDetailsResponse(GROUP_ID, "work", java.util.List.of())));
 
         mockMvc.perform(get("/api/v1/groups/{groupId}", GROUP_ID)
                         .session(authenticatedSession()))

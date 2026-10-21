@@ -3,13 +3,12 @@ package com.shrtrl.models;
 import org.hibernate.validator.constraints.Length;
 
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-@Entity
+// Not persisted: there is no guest-account table or repository in the application.
 @Table(name="UnauthorizedUser")
 public class UnauthorizedUser
 {
