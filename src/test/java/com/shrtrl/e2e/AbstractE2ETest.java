@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Testcontainers
-abstract class AbstractE2ETest {
+public abstract class AbstractE2ETest {
     static {
         try {
             java.nio.file.Files.createDirectories(java.nio.file.Path.of(

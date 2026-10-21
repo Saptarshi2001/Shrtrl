@@ -18,8 +18,8 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.shrtrl.transport.Redis.RedisEventInsertion;
 import com.shrtrl.transport.Redis.RedisWorker;
 import com.shrtrl.models.Event;
@@ -59,7 +59,7 @@ class RedisAnalyticsTransportIntegrationTest {
         connection = redisClient.connect();
         commands = connection.sync();
         commands.flushall();
-        objectMapper = new ObjectMapper().findAndRegisterModules();
+        objectMapper = tools.jackson.databind.json.JsonMapper.builder().build();
     }
 
     @AfterEach

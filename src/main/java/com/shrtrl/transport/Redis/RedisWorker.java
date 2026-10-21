@@ -17,7 +17,7 @@ import io.lettuce.core.api.sync.RedisCommands;
 
 import java.util.ArrayList;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.shrtrl.models.Event;
 
 @Component

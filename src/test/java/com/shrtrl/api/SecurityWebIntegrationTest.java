@@ -166,7 +166,7 @@ class SecurityWebIntegrationTest {
                         .header("X-XSRF-TOKEN", csrf.token())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"longUrl":"https://example.com/long"}
+                                {"longUrl":"https://example.com"}
                                 """))
                 .andExpect(status().isForbidden());
     }
@@ -178,7 +178,7 @@ class SecurityWebIntegrationTest {
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"longUrl":"https://example.com/long"}
+                                {"longUrl":"https://example.com"}
                                 """))
                 .andExpect(status().isForbidden());
     }
@@ -186,7 +186,7 @@ class SecurityWebIntegrationTest {
     @Test
     void authenticatedRequestWithCsrfCanCreateUrl() throws Exception {
         CsrfCredentials csrf = fetchCsrfCredentials();
-        UrlCreateRequest request = new UrlCreateRequest("https://example.com/long");
+        UrlCreateRequest request = new UrlCreateRequest("https://example.com");
         UrlCreateResponse response = new UrlCreateResponse(
                 request.longUrl(),
                 "abc123",
@@ -202,13 +202,21 @@ class SecurityWebIntegrationTest {
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"longUrl":"https://example.com/long"}
+                                {"longUrl":"https://example.com"}
                                 """))
                 .andExpect(status().isCreated());
     }
 
     @Test
     void publicRedirectDoesNotRequireAuthenticationOrCsrf() throws Exception {
+        var owner = new com.shrtrl.models.Users("Alice", "alice@example.com", "encoded-password");
+        owner.setUserId(USER_ID);
+        var url = new com.shrtrl.models.Urls("https://example.com", "abc123", OffsetDateTime.now());
+        url.setUser(owner);
+        when(urlService.findByShortCode("abc123"))
+                .thenReturn(new com.shrtrl.interfaces.urls.Resolveurl.shortcodeFound(url));
+        when(geoLocationService.lookup(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(com.shrtrl.DTOs.GeoLocation.UNKNOWN);
         when(urlCacheService.get("abc123"))
                 .thenReturn("https://example.com/destination");
 
@@ -227,7 +235,7 @@ class SecurityWebIntegrationTest {
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"longUrl":"https://example.com/new"}
+                                {"longUrl":"https://example.org"}
                                 """))
                 .andExpect(status().isForbidden());
     }
@@ -266,7 +274,7 @@ class SecurityWebIntegrationTest {
                         .session(session)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"groupName":"work"}
+                                {"groupName":"Works"}
                                 """))
                 .andExpect(status().isForbidden());
 
@@ -289,7 +297,7 @@ class SecurityWebIntegrationTest {
 
     @Test
     void authenticatedGroupCreateWithRealCsrfTokenSucceeds() throws Exception {
-        when(groupService.createGroup(USER_ID, "work"))
+        when(groupService.createGroup(USER_ID, "Works"))
                 .thenReturn(new com.shrtrl.interfaces.groups.CreateGroup.GroupCreated());
         CsrfCredentials csrf = fetchCsrfCredentials();
 
@@ -300,11 +308,11 @@ class SecurityWebIntegrationTest {
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"groupName":"work"}
+                                {"groupName":"Works"}
                                 """))
                 .andExpect(status().isCreated());
 
-        verify(groupService).createGroup(USER_ID, "work");
+        verify(groupService).createGroup(USER_ID, "Works");
     }
 
     @Test

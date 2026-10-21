@@ -8,7 +8,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.shrtrl.transport.EventStorage;
 import com.shrtrl.transport.Postgres.OutboxRepository;
 import com.shrtrl.transport.Postgres.PostgresEventInsertion;
@@ -21,7 +21,7 @@ class AnalyticsTransportSelectionIntegrationTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withUserConfiguration(TransportComponents.class)
             .withBean(OutboxRepository.class, () -> mock(OutboxRepository.class))
-            .withBean(ObjectMapper.class, ObjectMapper::new)
+            .withBean(ObjectMapper.class, () -> tools.jackson.databind.json.JsonMapper.builder().build())
             .withBean(RedisCommands.class, () -> mock(RedisCommands.class));
 
     @Test

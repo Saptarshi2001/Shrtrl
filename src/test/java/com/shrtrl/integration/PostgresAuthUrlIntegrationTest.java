@@ -69,7 +69,7 @@ class PostgresAuthUrlIntegrationTest {
         ));
 
         Urls url = new Urls(
-                "https://example.com/long",
+                "https://example.com",
                 null,
                 OffsetDateTime.parse("2026-07-26T10:15:30Z")
         );
@@ -94,7 +94,7 @@ class PostgresAuthUrlIntegrationTest {
     @Test
     void databaseRejectsUrlWithoutOwner() {
         Urls url = new Urls(
-                "https://example.com/unowned",
+                "https://example.org",
                 null,
                 OffsetDateTime.parse("2026-07-26T10:15:30Z")
         );
@@ -106,16 +106,16 @@ class PostgresAuthUrlIntegrationTest {
     @Test
     void groupLookupIsScopedToItsOwner() {
         Users owner = usersRepository.saveAndFlush(new Users(
-                "group-owner",
+                "GroupOwner",
                 "group-owner@example.com",
                 "encoded-password"
         ));
         Users otherUser = usersRepository.saveAndFlush(new Users(
-                "other-user",
+                "OtherUser",
                 "other-user@example.com",
                 "encoded-password"
         ));
-        Groups group = groupRepository.saveAndFlush(new Groups("work", owner));
+        Groups group = groupRepository.saveAndFlush(new Groups("Works", owner));
         entityManager.clear();
 
         assertThat(groupRepository.findByGroupIdAndUser_UserId(
@@ -131,25 +131,25 @@ class PostgresAuthUrlIntegrationTest {
     @Test
     void databaseRejectsDuplicateGroupNameForSameOwner() {
         Users owner = usersRepository.saveAndFlush(new Users(
-                "duplicate-owner",
+                "DuplicateOwner",
                 "duplicate-owner@example.com",
                 "encoded-password"
         ));
-        groupRepository.saveAndFlush(new Groups("work", owner));
+        groupRepository.saveAndFlush(new Groups("Works", owner));
 
         assertThatThrownBy(() -> groupRepository.saveAndFlush(
-                new Groups("work", owner)
+                new Groups("Works", owner)
         )).isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
     void deletingUserCascadesToOwnedGroups() {
         Users owner = usersRepository.saveAndFlush(new Users(
-                "cascade-owner",
+                "CascadeOwner",
                 "cascade-owner@example.com",
                 "encoded-password"
         ));
-        Groups group = groupRepository.saveAndFlush(new Groups("work", owner));
+        Groups group = groupRepository.saveAndFlush(new Groups("Works", owner));
         int groupId = group.getGroupId();
 
         usersRepository.delete(owner);

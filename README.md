@@ -314,6 +314,9 @@ and no persistent volume mounts. They do not use your development databases.
 # Compile all production and test sources without running tests
 .\mvnw.cmd -DskipTests test-compile
 
+# Run the complete test suite and package the application (the CI build)
+.\mvnw.cmd package
+
 # Run real application flows with disposable PostgreSQL, Redis, and ClickHouse
 .\mvnw.cmd -Pe2e test
 
@@ -326,6 +329,8 @@ On Linux/macOS, use `./mvnw` instead of `.\mvnw.cmd`.
 Verified on **22 October 2026**: all **18 E2E tests passed** (5 users, 4 groups,
 5 URLs, and 4 PostgreSQL transport tests), with zero failures, errors, or skips.
 No suite-labeled test containers remained after the run.
+The complete default suite was also verified: **98 tests passed**, with zero
+failures, errors, or skips, and the application JAR was packaged successfully.
 
 | Test package | Scope |
 | --- | --- |
@@ -343,9 +348,10 @@ Testcontainers also registers cleanup on JVM exit. Check for leftovers with:
 docker ps -a --filter "label=com.shrtrl.test-suite=e2e"
 ```
 
-The default `mvn test` additionally selects older API/integration tests and a
-context-load test that requires configured services. Compilation alone does not
-establish that this broader suite passes; the isolated E2E command above is the
-recommended flow check.
+The default `mvn test` runs API, service, integration, E2E, and application-startup
+tests. The startup test also uses disposable database containers, so no local
+database credentials are needed. Default-suite reports are in
+`target/surefire-reports`. GitHub Actions runs `./mvnw clean package`, including
+this complete suite.
 
 

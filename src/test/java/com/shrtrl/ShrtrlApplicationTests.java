@@ -1,10 +1,9 @@
 package com.shrtrl;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+import com.shrtrl.e2e.AbstractE2ETest;
 
-@SpringBootTest
-class ShrtrlApplicationTests {
+class ShrtrlApplicationTests extends AbstractE2ETest {
 
 	@Test
 	void contextLoads() {

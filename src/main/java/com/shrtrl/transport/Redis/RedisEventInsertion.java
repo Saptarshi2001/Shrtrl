@@ -7,9 +7,9 @@ import jakarta.transaction.Transactional;
 import com.shrtrl.transport.EventStorage;
 import com.shrtrl.models.Event;
 import io.lettuce.core.api.sync.RedisCommands;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import java.util.Map;
-import com.fasterxml.jackson.core.JsonProcessingException;
+import tools.jackson.core.JacksonException;
 @Component
 @ConditionalOnProperty(
     name="app.analytics.transport",
@@ -32,7 +32,7 @@ public class RedisEventInsertion implements EventStorage
         String eventJson = objectMapper.writeValueAsString(event);
         command.xadd("analytics:clicks",Map.of("payload", eventJson));
     
-    } catch (JsonProcessingException exception) {
+    } catch (JacksonException exception) {
         throw new IllegalStateException("Could not serialize analytics event",exception);
     }
     }

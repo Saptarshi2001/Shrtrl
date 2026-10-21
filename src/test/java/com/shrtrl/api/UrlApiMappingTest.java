@@ -61,7 +61,7 @@ class UrlApiMappingTest {
     @Test
     void postUrlCreatesOwnedShortUrlAndCachesIt() throws Exception {
         OffsetDateTime createdAt = OffsetDateTime.parse("2026-07-26T10:15:30Z");
-        UrlCreateRequest request = new UrlCreateRequest("https://example.com/long");
+        UrlCreateRequest request = new UrlCreateRequest("https://example.com");
         UrlCreateResponse response = new UrlCreateResponse(
                 request.longUrl(),
                 "abc123",
@@ -74,13 +74,13 @@ class UrlApiMappingTest {
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"longUrl":"https://example.com/long"}
+                                {"longUrl":"https://example.com"}
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.shortCode").value("abc123"));
 
         verify(urlService).shortenurl(request, USER_ID);
-        verify(urlCacheService).set("abc123", "https://example.com/long");
+        verify(urlCacheService).set("abc123", "https://example.com");
     }
 
     @Test
@@ -88,7 +88,7 @@ class UrlApiMappingTest {
         mockMvc.perform(post("/api/v1/urls")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"longUrl":"https://example.com/long"}
+                                {"longUrl":"https://example.com"}
                                 """))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.statusCode").value(401));
@@ -163,32 +163,32 @@ class UrlApiMappingTest {
 
     @Test
     void putShortCodeUpdatesOwnedUrlAndCache() throws Exception {
-        UpdateLongUrl request = new UpdateLongUrl("https://example.com/new");
+        UpdateLongUrl request = new UpdateLongUrl("https://example.org");
         when(urlService.updateLongurl("abc123", request, USER_ID)).thenReturn(new com.shrtrl.interfaces.urls.UpdateUrl.UrlUpdated());
 
         mockMvc.perform(put("/api/v1/urls/{shortcode}", "abc123")
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"longUrl":"https://example.com/new"}
+                                {"longUrl":"https://example.org"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.shortCode").value("abc123"));
 
         verify(urlService).updateLongurl("abc123", request, USER_ID);
-        verify(urlCacheService).set("abc123", "https://example.com/new");
+        verify(urlCacheService).set("abc123", "https://example.org");
     }
 
     @Test
     void putShortCodeReturnsNotFoundWhenUserDoesNotOwnUrl() throws Exception {
-        UpdateLongUrl request = new UpdateLongUrl("https://example.com/new");
+        UpdateLongUrl request = new UpdateLongUrl("https://example.org");
         when(urlService.updateLongurl("abc123", request, USER_ID)).thenReturn(new com.shrtrl.interfaces.urls.UpdateUrl.NoShortCodeFound());
 
         mockMvc.perform(put("/api/v1/urls/{shortcode}", "abc123")
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"longUrl":"https://example.com/new"}
+                                {"longUrl":"https://example.org"}
                                 """))
                 .andExpect(status().isNotFound());
 

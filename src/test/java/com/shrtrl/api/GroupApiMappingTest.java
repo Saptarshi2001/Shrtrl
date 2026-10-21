@@ -53,18 +53,18 @@ class GroupApiMappingTest {
 
     @Test
     void createUsesSessionOwnerAndValidatedRequestDto() throws Exception {
-        when(groupService.createGroup(USER_ID, "work"))
+        when(groupService.createGroup(USER_ID, "Works"))
                 .thenReturn(new CreateGroup.GroupCreated());
         mockMvc.perform(post("/api/v1/groups")
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"groupName":"work"}
+                                {"groupName":"Works"}
                                 """))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.groupName").value("work"));
+                .andExpect(jsonPath("$.groupName").value("Works"));
 
-        verify(groupService).createGroup(USER_ID, "work");
+        verify(groupService).createGroup(USER_ID, "Works");
     }
 
     @Test
@@ -93,7 +93,7 @@ class GroupApiMappingTest {
         mockMvc.perform(post("/api/v1/groups")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"groupName":"work"}
+                                {"groupName":"Works"}
                                 """))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.statusCode").value(401));
@@ -103,15 +103,14 @@ class GroupApiMappingTest {
 
     @Test
     void createTranslatesDuplicateNameToConflict() throws Exception {
-        doThrow(new DataIntegrityViolationException("constraint details"))
-                .when(groupService)
-                .createGroup(USER_ID, "work");
+        when(groupService.createGroup(USER_ID, "Works"))
+                .thenReturn(new CreateGroup.DuplicateGroup());
 
         mockMvc.perform(post("/api/v1/groups")
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"groupName":"work"}
+                                {"groupName":"Works"}
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errmsg")
@@ -135,9 +134,10 @@ class GroupApiMappingTest {
     }
 
     @Test
-    void updateTranslatesDuplicateNameToConflict() throws Exception {
+    void updateTranslatesDatabaseFailureToServerError() throws Exception {
         when(groupService.updateGroup(GROUP_ID, USER_ID, "existing"))
-                .thenThrow(new DataIntegrityViolationException("constraint details"));
+                .thenReturn(new UpdateGroup.DatabaseFailure(
+                        new DataIntegrityViolationException("constraint details")));
 
         mockMvc.perform(put("/api/v1/groups/{groupId}", GROUP_ID)
                         .session(authenticatedSession())
@@ -145,9 +145,9 @@ class GroupApiMappingTest {
                         .content("""
                                 {"groupName":"existing"}
                                 """))
-                .andExpect(status().isConflict())
+                .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.errmsg")
-                        .value("a group with this name already exists"));
+                        .value("Database operation failed"));
     }
 
     @Test
@@ -179,12 +179,12 @@ class GroupApiMappingTest {
     @Test
     void readReturnsOwnedGroup() throws Exception {
         when(groupService.findGroupDetails(GROUP_ID, USER_ID))
-                .thenReturn(Optional.of(new GroupDetailsResponse(GROUP_ID, "work", java.util.List.of())));
+                .thenReturn(Optional.of(new GroupDetailsResponse(GROUP_ID, "Works", java.util.List.of())));
 
         mockMvc.perform(get("/api/v1/groups/{groupId}", GROUP_ID)
                         .session(authenticatedSession()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.groupName").value("work"));
+                .andExpect(jsonPath("$.groupName").value("Works"));
     }
 
     private MockHttpSession authenticatedSession() {

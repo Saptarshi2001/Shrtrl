@@ -126,7 +126,7 @@ class PostgresAnalyticsTransportIntegrationTest {
 
     @Test
     void workerKeepsTheBatchWhenClickHouseInsertionFails() {
-        Event event = eventAt("2026-09-06T08:00:00Z", "retry-me");
+        Event event = eventAt("2026-09-06T08:00:00Z", "retry1");
         outboxRepository.saveAndFlush(event);
         doThrow(new IllegalStateException("ClickHouse unavailable"))
                 .when(analyticsService).insertEvents(anyList());
