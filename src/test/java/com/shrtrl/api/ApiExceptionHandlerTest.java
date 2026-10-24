@@ -46,11 +46,11 @@ class ApiExceptionHandlerTest {
     }
 
     @Test
-    void escapedIntegrityFailureReturnsConflict() throws Exception {
+    void escapedIntegrityFailureUsesSharedRuntimeHandler() throws Exception {
         when(service.updateAccount(USER_ID, REQUEST))
                 .thenThrow(new DataIntegrityViolationException("private constraint details"));
-        update().andExpect(status().isConflict())
-                .andExpect(jsonPath("$.errmsg").value("operation conflicts with existing data"));
+        update().andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.errmsg").value("operation could not be completed"));
     }
 
     @Test
