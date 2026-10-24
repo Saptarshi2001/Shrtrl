@@ -1,9 +1,11 @@
 package com.shrtrl.controllers;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.List;
 import java.util.Optional;
 
-import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -37,6 +39,8 @@ import jakarta.validation.Valid;
 @RequestMapping("/api/v1/auth")
 public class AuthController {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(AuthController.class);
+
     private final AuthService authService;
     private final UsersService usersService;
 
@@ -69,6 +73,7 @@ public class AuthController {
                             new ApiErrorResponse(404, "Not Found", "No user found"));
                 }
                 case CreateAccountResult.DatabaseFailure dbfailure -> {
+                    LOGGER.error("Could not create account: database operation failed");
                     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                             new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
                 }
@@ -90,10 +95,12 @@ public class AuthController {
                         new ApiErrorResponse(401, "Unauthorized", "email or password is incorrect"));
             }
             case LoginResult.DatabaseFailure failure -> {
+                LOGGER.error("Could not log in", failure.cause());
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                         new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
             }
             case LoginResult.RuntimeFailure failure -> {
+                LOGGER.error("Could not log in", failure.cause());
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                         new ApiErrorResponse(500, "Internal Server Error", "Login could not be completed"));
             }

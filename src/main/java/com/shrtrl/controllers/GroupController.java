@@ -1,9 +1,11 @@
 package com.shrtrl.controllers;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Optional;
 import java.util.UUID;
 
-import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -32,6 +34,8 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/api/v1/groups")
 public class GroupController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GroupController.class);
 
     private final GroupService groupService;
 
@@ -65,10 +69,12 @@ public class GroupController {
                         new ApiErrorResponse(404, "Not Found", "No user found"));
             }
             case CreateGroup.DatabaseFailure dbfailure -> {
+                LOGGER.error("Could not create group", dbfailure.cause());
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                         new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
             }
             case CreateGroup.RuntimeFailure runtimefailure -> {
+                LOGGER.error("Could not create group", runtimefailure.cause());
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                         new ApiErrorResponse(500, "Internal Server Error", "Group could not be created"));
             }
@@ -98,10 +104,12 @@ public class GroupController {
                         new ApiErrorResponse(404, "Not Found", "group does not exist"));
             }
             case UpdateGroup.DatabaseFailure dbfailure -> {
+                LOGGER.error("Could not update group", dbfailure.cause());
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                         new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
             }
             case UpdateGroup.RuntimeFailure runtimefailure -> {
+                LOGGER.error("Could not update group", runtimefailure.cause());
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                         new ApiErrorResponse(500, "Internal Server Error", "Group could not be updated"));
             }
@@ -127,10 +135,12 @@ public class GroupController {
                         new ApiErrorResponse(404, "Not Found", "group does not exist"));
             }
             case DeleteGroup.DatabaseFailure dbfailure -> {
+                LOGGER.error("Could not delete group", dbfailure.cause());
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                         new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
             }
             case DeleteGroup.RuntimeFailure runtimefailure -> {
+                LOGGER.error("Could not delete group", runtimefailure.cause());
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                         new ApiErrorResponse(500, "Internal Server Error", "Group could not be deleted"));
             }
@@ -145,20 +155,12 @@ public class GroupController {
         if (userId == null) {
             return unauthorized();
         }
-        try {
-            Optional<GroupDetailsResponse> group = groupService.findGroupDetails(groupId, userId);
-            if (group.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                        new ApiErrorResponse(404, "Not Found", "group does not exist"));
-            }
-            return ResponseEntity.ok(group.get());
-        } catch (DataAccessException exception) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    new ApiErrorResponse(500, "Internal Server Error", "Database operation failed"));
-        } catch (RuntimeException exception) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    new ApiErrorResponse(500, "Internal Server Error", "Group could not be loaded"));
+        Optional<GroupDetailsResponse> group = groupService.findGroupDetails(groupId, userId);
+        if (group.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                    new ApiErrorResponse(404, "Not Found", "group does not exist"));
         }
+        return ResponseEntity.ok(group.get());
         
     }
 

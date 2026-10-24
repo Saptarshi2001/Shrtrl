@@ -2,6 +2,8 @@ package com.shrtrl.transport.Redis;
 
 import java.time.Duration;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -27,6 +29,7 @@ import com.shrtrl.models.Event;
 )
 public class RedisWorker
 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(RedisWorker.class);
 
     private static final String STREAM = "analytics:clicks";
     private static final String GROUP = "clickhouse-workers";
@@ -70,7 +73,7 @@ public class RedisWorker
                 cmd.xack(STREAM, GROUP, messageIds);
                 return 1;
             } catch (Exception exception) {
-
+                LOGGER.error("Failed to deliver Redis analytics events to ClickHouse; messages remain unacknowledged", exception);
                 return 0;
                 // Do not XACK.
                 // Messages remain pending in Redis for retry/recovery.

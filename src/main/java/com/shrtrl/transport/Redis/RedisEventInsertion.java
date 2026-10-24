@@ -1,5 +1,7 @@
 package com.shrtrl.transport.Redis;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Component;
@@ -17,6 +19,7 @@ import tools.jackson.core.JacksonException;
 )
 public class RedisEventInsertion implements EventStorage
 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(RedisEventInsertion.class);
 
     private RedisCommands<String,String> command;
     private final ObjectMapper objectMapper;
@@ -33,7 +36,11 @@ public class RedisEventInsertion implements EventStorage
         command.xadd("analytics:clicks",Map.of("payload", eventJson));
     
     } catch (JacksonException exception) {
+        LOGGER.error("Could not serialize analytics event for Redis", exception);
         throw new IllegalStateException("Could not serialize analytics event",exception);
+    } catch (RuntimeException exception) {
+        LOGGER.error("Could not enqueue analytics event in Redis", exception);
+        throw exception;
     }
     }
     

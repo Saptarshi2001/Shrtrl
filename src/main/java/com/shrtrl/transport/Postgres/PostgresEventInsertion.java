@@ -1,6 +1,8 @@
 
 package com.shrtrl.transport.Postgres;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import com.shrtrl.transport.EventStorage;
@@ -14,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 )
 public class PostgresEventInsertion implements EventStorage
 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(PostgresEventInsertion.class);
 
     private final OutboxRepository outbox;
     public PostgresEventInsertion(OutboxRepository outbox)
@@ -25,6 +28,11 @@ public class PostgresEventInsertion implements EventStorage
     @Transactional
     public void insertEvent(Event event)
     {
-        outbox.saveAndFlush(event);
+        try {
+            outbox.saveAndFlush(event);
+        } catch (RuntimeException exception) {
+            LOGGER.error("Could not save analytics event to PostgreSQL outbox", exception);
+            throw exception;
+        }
     }
 }

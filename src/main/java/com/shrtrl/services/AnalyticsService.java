@@ -11,6 +11,13 @@ import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.insert.InsertResponse;
 import com.clickhouse.client.api.query.GenericRecord;
 import com.clickhouse.data.ClickHouseFormat;
+import com.shrtrl.DTOs.ClickSummaryResponse;
+import com.shrtrl.DTOs.HourlyClicksResponse;
+import com.shrtrl.DTOs.ShortCodeClicksResponse;
+import com.shrtrl.DTOs.LiveAnalyticsResponse;
+import com.shrtrl.DTOs.AnalyticsEventResponse;
+import com.shrtrl.DTOs.CountryClicksResponse;
+import com.shrtrl.DTOs.ReferrerClicksResponse;
 import com.shrtrl.models.Event;
 
 import jakarta.annotation.PostConstruct;
@@ -53,15 +60,25 @@ public class AnalyticsService
         }
     }
 
-    public List<GenericRecord> showanalytics(UUID userId)
+    public List<AnalyticsEventResponse> showanalytics(UUID userId)
     {
       return queryForUser("""
                 SELECT *
                 FROM events
                 WHERE userid = {userId:UUID}
-                """, userId);  
+                """, userId).stream()
+                .map(row -> new AnalyticsEventResponse(row.getUUID("event_id"),
+                        row.getUUID("userid"),
+                        row.getString("shortcode"),
+                        row.getInstant("occurred_at"),
+                        row.getString("country"),
+                        row.getString("state"),
+                        row.getString("ip"),
+                        row.getString("user_agent"),
+                        row.getString("referrer")))
+                .toList();
     }
-    public List<GenericRecord> clicksByCountry(UUID userId)
+    public List<CountryClicksResponse> clicksByCountry(UUID userId)
     {
         return queryForUser("""
                 SELECT country, shortcode, count(shortcode) AS cnt
@@ -69,10 +86,14 @@ public class AnalyticsService
                 WHERE userid = {userId:UUID}
                 GROUP BY country, shortcode
                 ORDER BY country DESC
-                """, userId);
+                """, userId).stream()
+                .map(row -> new CountryClicksResponse(row.getString("country"),
+                        row.getString("shortcode"),
+                        row.getLong("cnt")))
+                .toList();
     }
 
-    public List<GenericRecord> topFiveShortCodes(UUID userId)
+    public List<ShortCodeClicksResponse> topFiveShortCodes(UUID userId)
     {
         return queryForUser("""
                 SELECT shortcode, count(shortcode) AS cnt
@@ -81,10 +102,13 @@ public class AnalyticsService
                 GROUP BY shortcode
                 ORDER BY cnt DESC, shortcode
                 LIMIT 5
-                """, userId);
+                """, userId).stream()
+                .map(row -> new ShortCodeClicksResponse(row.getString("shortcode"),
+                        row.getLong("cnt")))
+                .toList();
     }
 
-    public List<GenericRecord> eventsInLastHour(UUID userId)
+    public List<LiveAnalyticsResponse> eventsInLastHour(UUID userId)
     {
         return queryForUser("""
                 SELECT shortcode, country, state, ip, referrer
@@ -92,10 +116,16 @@ public class AnalyticsService
                 WHERE userid = {userId:UUID}
                   AND occurred_at >= now() - INTERVAL 1 HOUR
                 ORDER BY occurred_at DESC
-                """, userId);
+                """, userId).stream()
+                .map(row -> new LiveAnalyticsResponse(row.getString("shortcode"),
+                        row.getString("country"),
+                        row.getString("state"),
+                        row.getString("ip"),
+                        row.getString("referrer")))
+                .toList();
     }
 
-    public List<GenericRecord> hourlyClicksInLast24Hours(UUID userId)
+    public List<HourlyClicksResponse> hourlyClicksInLast24Hours(UUID userId)
     {
         return queryForUser("""
                 SELECT shortcode, toStartOfHour(occurred_at) AS hour,
@@ -105,10 +135,14 @@ public class AnalyticsService
                   AND occurred_at >= now() - INTERVAL 24 HOUR
                 GROUP BY shortcode, hour
                 ORDER BY hour DESC, cnt DESC
-                """, userId);
+                """, userId).stream()
+                .map(row -> new HourlyClicksResponse(row.getString("shortcode"),
+                        row.getInstant("hour"),
+                        row.getLong("cnt")))
+                .toList();
     }
 
-    public List<GenericRecord> clicksToday(UUID userId)
+    public List<ClickSummaryResponse> clicksToday(UUID userId)
     {
         return queryForUser("""
                 SELECT userid, shortcode, count(shortcode) AS cnt, country, state
@@ -118,10 +152,15 @@ public class AnalyticsService
                   AND occurred_at < today() + INTERVAL 1 DAY
                 GROUP BY userid, shortcode, country, state
                 ORDER BY cnt DESC
-                """, userId);
+                """, userId).stream()
+                .map(row -> new ClickSummaryResponse(row.getString("shortcode"),
+                        row.getLong("cnt"),
+                        row.getString("country"),
+                        row.getString("state")))
+                .toList();
     }
 
-    public List<GenericRecord> clicksThisMonth(UUID userId)
+    public List<ClickSummaryResponse> clicksThisMonth(UUID userId)
     {
         return queryForUser("""
                 SELECT userid, shortcode, count(shortcode) AS cnt, country, state
@@ -131,10 +170,15 @@ public class AnalyticsService
                   AND occurred_at < addMonths(toStartOfMonth(today()), 1)
                 GROUP BY userid, shortcode, country, state
                 ORDER BY cnt DESC
-                """, userId);
+                """, userId).stream()
+                .map(row -> new ClickSummaryResponse(row.getString("shortcode"),
+                        row.getLong("cnt"),
+                        row.getString("country"),
+                        row.getString("state")))
+                .toList();
     }
 
-    public List<GenericRecord> clicksThisYear(UUID userId)
+    public List<ClickSummaryResponse> clicksThisYear(UUID userId)
     {
         return queryForUser("""
                 SELECT userid, shortcode, count(shortcode) AS cnt, country, state
@@ -143,10 +187,15 @@ public class AnalyticsService
                   AND toYear(occurred_at) = toYear(today())
                 GROUP BY userid, shortcode, country, state
                 ORDER BY cnt DESC
-                """, userId);
+                """, userId).stream()
+                .map(row -> new ClickSummaryResponse(row.getString("shortcode"),
+                        row.getLong("cnt"),
+                        row.getString("country"),
+                        row.getString("state")))
+                .toList();
     }
 
-    public List<GenericRecord> clicksByReferrer(UUID userId)
+    public List<ReferrerClicksResponse> clicksByReferrer(UUID userId)
     {
         return queryForUser("""
                 SELECT userid, shortcode, referrer, count(*) AS cnt
@@ -154,10 +203,15 @@ public class AnalyticsService
                 WHERE userid = {userId:UUID}
                 GROUP BY userid, shortcode, referrer
                 ORDER BY cnt DESC
-                """, userId);
+                """, userId).stream()
+                .map(row -> new ReferrerClicksResponse(row.getUUID("userid"),
+                        row.getString("shortcode"),
+                        row.getString("referrer"),
+                        row.getLong("cnt")))
+                .toList();
     }
 
-    public List<GenericRecord> clicksByCountryAndState(UUID userId)
+    public List<ClickSummaryResponse> clicksByCountryAndState(UUID userId)
     {
         return queryForUser("""
                 SELECT userid, shortcode, count(shortcode) AS cnt, country, state
@@ -165,7 +219,12 @@ public class AnalyticsService
                 WHERE userid = {userId:UUID}
                 GROUP BY userid, shortcode, country, state
                 ORDER BY cnt DESC
-                """, userId);
+                """, userId).stream()
+                .map(row -> new ClickSummaryResponse(row.getString("shortcode"),
+                        row.getLong("cnt"),
+                        row.getString("country"),
+                        row.getString("state")))
+                .toList();
     }
 
     private List<GenericRecord> queryForUser(String sql, UUID userId)
