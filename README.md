@@ -1,33 +1,93 @@
 # Shrtrl
 
-**Shorten links, organize them into groups, and understand how they are used.**
+**Shorten links, organize them into groups, and understand how often they are used.**
 
-Shrtrl is a Java 21 and Spring Boot backend for a URL shortener. It provides
-session-based accounts, owner-scoped link management, optional groups, and click
-analytics backed by PostgreSQL, Redis, and ClickHouse. It currently exposes a
-backend API; a dashboard frontend is not included.
+Shrtrl is a Spring Boot backend for a URL shortener. It provides url shortening,
+owner-scoped link management,group creation, and click
+analytics.
 
-## Features
+## Examples
 
-| Feature | What it does |
-| --- | --- |
-| Accounts and login | Register, sign in, view or update your profile, change your password, and delete your account. Passwords are hashed with BCrypt. |
-| Session authentication | Login establishes an HTTP session and rotates its ID. State-changing requests require a CSRF token. |
-| Short links | Generate a Base62 short code, redirect visitors with HTTP `302`, update the destination, or delete an owned link. |
-| Optional groups | A URL can belong to one group or remain ungrouped. A selected group must belong to the URL owner. Deleting a group preserves its links. |
-| Ownership checks | Account management uses the logged-in user. Link and group mutations are scoped to that owner. Group details include its ID, name, and links. |
-| Redis URL cache | Cache destinations with a configurable expiry. Updates refresh the cache and deletions remove its entry. The current redirect still queries PostgreSQL for the owner needed by analytics. |
-| Click capture | Record an event ID, owner ID, short code, timestamp, visitor IP, user agent, and referrer when resolving a link. |
-| IP geolocation | Look up public visitor IPs through `ipwho.is` over HTTPS to obtain country and state. Local/private IPs and failed lookups produce unknown locations. This sends the queried IP to an external provider. |
-| PostgreSQL outbox | Save clicks durably before a scheduled worker sends batches to ClickHouse. Failed deliveries stay queued for retry. |
-| Analytics queries | Retrieve recent activity, current day/month/year counts, and country/state breakdowns from ClickHouse. |
-| Schema migrations | Flyway applies PostgreSQL migrations at startup; Hibernate validates the resulting schema. |
-| Container tests | Exercise account, group, URL, and transport behavior using disposable test databases. |
+Run these curl commands in Bash (Linux, macOS, or Git Bash) after starting the
+app. Replace port `8080` if you changed `APP_PORT`.
 
-## Stack and layout
+### Sign in first
 
-Java 21 · Spring Boot 4.0.6 · Spring Security · Spring Data JPA · PostgreSQL 16 ·
-Redis 7 · ClickHouse 24 · Flyway · Maven Wrapper · JUnit · Testcontainers
+Get a CSRF token and save the session cookies:
+
+```bash
+curl -s -c cookies.txt http://localhost:8080/api/v1/auth/csrf
+```
+
+Replace `<CSRF_HEADER>` and `<CSRF_TOKEN>` below with the returned `headerName`
+and `token`. Register once, then log in:
+
+```bash
+curl -i -b cookies.txt -c cookies.txt \
+  -H 'Content-Type: application/json' -H '<CSRF_HEADER>: <CSRF_TOKEN>' \
+  -d '{"username":"Alice","email":"alice@example.com","password":"ExamplePass123!"}' \
+  http://localhost:8080/api/v1/auth/register
+
+curl -i -b cookies.txt -c cookies.txt \
+  -H 'Content-Type: application/json' -H '<CSRF_HEADER>: <CSRF_TOKEN>' \
+  -d '{"email":"alice@example.com","password":"ExamplePass123!"}' \
+  http://localhost:8080/api/v1/auth/login
+
+curl -s -b cookies.txt -c cookies.txt http://localhost:8080/api/v1/auth/csrf
+```
+
+Use the **new** token and header name from the last command for the POST
+requests below.
+
+### Create a group
+
+```bash
+curl -i -b cookies.txt \
+  -H 'Content-Type: application/json' -H '<CSRF_HEADER>: <CSRF_TOKEN>' \
+  -d '{"groupName":"Study Links"}' \
+  http://localhost:8080/api/v1/groups
+```
+
+### Shorten a URL
+
+```bash
+curl -i -b cookies.txt \
+  -H 'Content-Type: application/json' -H '<CSRF_HEADER>: <CSRF_TOKEN>' \
+  -d '{"longUrl":"https://example.com"}' \
+  http://localhost:8080/api/v1/urls
+```
+
+Copy `shortCode` from the response. Visit the short link to record a click:
+
+```bash
+curl -i http://localhost:8080/api/v1/urls/<SHORT_CODE>
+```
+
+Replace `<SHORT_CODE>` with the returned value. The response is a `302` redirect
+with the original URL in the `Location` header.
+
+### Display analytics
+
+Allow a few seconds for the background worker to deliver the click, then run:
+
+```bash
+# Recent visits
+curl -s -b cookies.txt http://localhost:8080/api/v1/Analytics/dashboard/live
+
+# Click counts by country
+curl -s -b cookies.txt http://localhost:8080/api/v1/Analytics/countries
+
+# Click counts by country and state
+curl -s -b cookies.txt http://localhost:8080/api/v1/Analytics/states
+```
+
+## Requirements
+
+- Docker with Docker Compose
+Java, Maven, PostgreSQL, Redis, and ClickHouse are supplied by the Docker build and containers.
+
+## layout
+
 
 ```text
 src/main/java/com/shrtrl/
@@ -49,12 +109,13 @@ src/test/java/com/shrtrl/
 
 The packages above belong to one Maven application.
 
-## Install and run
+## Setup
 
-Install **JDK 21** and **Docker with Docker Compose**. Maven is supplied by the
-wrapper. The commands below use PowerShell from the repository root.
+Install **Docker with Docker Compose** and start Docker. Run the following
+commands in PowerShell from the repository root. No local Java or Maven
+installation is needed to run the application through Docker.
 
-### 1. Get the source and configure the databases
+### 1. Get the source and configure the services
 
 ```powershell
 git clone https://github.com/Saptarshi2001/Shrtrl.git
@@ -62,55 +123,41 @@ cd Shrtrl
 Copy-Item .env.example .env
 ```
 
-Edit `.env` and replace the example database passwords. For this quickstart, set
-`CLICKHOUSE_DB=default`: the supplied ClickHouse initialization script creates
-`events` in that database. Keep the default database ports and
-`POSTGRES_DB=shrtrl` for the commands below.
+Edit `.env` and replace the example PostgreSQL, Redis, and ClickHouse passwords.
+Keep the other example values for the initial setup. Compose reads `.env` and
+passes the connection settings to the application container automatically.
+
+### 2. Build and start the application
 
 ```powershell
-docker compose --env-file .env up -d postgres redis clickhouse
+docker compose --env-file .env up --build -d
 docker compose ps
+docker compose logs -f app
 ```
 
-Compose starts the three database services with health checks and persistent
-volumes. The initialization scripts run when the ClickHouse data volume is first
-created. An existing volume must already contain the `events` table.
+Compose builds the Java application image and starts the app, PostgreSQL, Redis,
+and ClickHouse. The app starts after the database health checks pass. Wait for
+the Spring Boot startup message in the app logs, then use the API at
+`http://localhost:8080` (or the `APP_PORT` configured in `.env`). Press Ctrl+C
+to stop following logs; the containers continue running.
 
-### 2. Connect the local Java application
+The image build downloads Maven dependencies and packages the application with
+tests skipped. Run the test suite separately as described below; local Maven
+test commands require JDK 21.
 
-Compose reads `.env`; a Maven-launched application does not automatically load it.
-Set the following environment variables, using the same passwords as `.env`:
+Database data is stored in persistent Docker volumes. ClickHouse initialization
+scripts create the `events` table on the first initialization of its data volume.
+Reused volumes must already contain that table. Flyway applies PostgreSQL
+migrations when the application starts.
+
+To stop the services while keeping their data:
 
 ```powershell
-$env:SPRING_DATASOURCE_URL = 'jdbc:postgresql://localhost:5432/shrtrl'
-$env:SPRING_DATASOURCE_USERNAME = 'shrtrl'
-$env:SPRING_DATASOURCE_PASSWORD = 'your-postgres-password'
-$env:REDIS_URI = 'redis://:your-redis-password@localhost:6379'
-$env:CLICKHOUSE_ENDPOINT = 'http://localhost:8123'
-$env:CLICKHOUSE_USERNAME = 'shrtrl'
-$env:CLICKHOUSE_PASSWORD = 'your-clickhouse-password'
-$env:CLICKHOUSE_DATABASE = 'default'
-$env:ANALYTICS_TRANSPORT = 'postgres'
-
-.\mvnw.cmd spring-boot:run
+docker compose down
 ```
 
-Use a URI-encoded password in `REDIS_URI` if it contains reserved URI characters.
-The API listens at `http://localhost:8080`. On Linux/macOS, export the same
-variables and use `./mvnw spring-boot:run`.
-
-On startup, Flyway migrates PostgreSQL and the analytics client reads the
-ClickHouse `events` schema. All three database services must therefore be
-available before starting the application.
-
-To build a JAR without running tests:
-
-```powershell
-.\mvnw.cmd -DskipTests package
-```
-
-The supplied application Dockerfile runs the full test suite while building.
-The dependency-only Compose startup above is the documented development path.
+On Linux/macOS, use `cp .env.example .env` for the copy step; the Docker Compose
+commands are the same.
 
 ### Configuration
 
@@ -139,33 +186,6 @@ All routes use the `/api/v1` prefix. Send JSON request bodies with
 | `POST` | `/auth/login` | Public with CSRF. Body: `email`, `password`. Return `200` and establish the session, or `401` for invalid credentials. |
 | `POST` | `/auth/logout` | Authenticated with CSRF. Clear authentication and invalidate the session. |
 
-Obtain a token before registration/login and send it in the header named by
-`headerName`. Keep the cookies from the token request. Refresh the token after
-login before making authenticated mutations.
-
-```powershell
-$base = 'http://localhost:8080/api/v1'
-$csrf = Invoke-RestMethod "$base/auth/csrf" -SessionVariable session
-$headers = @{}
-$headers[$csrf.headerName] = $csrf.token
-
-$registration = @{
-    username = 'Alice'
-    email = 'alice@example.com'
-    password = 'a-long-example-password'
-} | ConvertTo-Json
-Invoke-RestMethod "$base/auth/register" -Method Post -WebSession $session `
-    -Headers $headers -ContentType 'application/json' -Body $registration
-
-$login = @{ email = 'alice@example.com'; password = 'a-long-example-password' } |
-    ConvertTo-Json
-Invoke-RestMethod "$base/auth/login" -Method Post -WebSession $session `
-    -Headers $headers -ContentType 'application/json' -Body $login
-
-$csrf = Invoke-RestMethod "$base/auth/csrf" -WebSession $session
-$headers[$csrf.headerName] = $csrf.token
-Invoke-RestMethod "$base/account" -WebSession $session
-```
 
 Usernames currently require 5–20 letters, emails 15–30 characters, and passwords
 at least 8 characters. A Google success-handler route exists, but Google OAuth
@@ -256,9 +276,6 @@ default to `0` and `20` and are also not yet applied. Responses expose ClickHous
 records rather than a finalized analytics response DTO. Analytics endpoints are
 not covered by the current HTTP E2E suite.
 
-`/live` is a normal HTTP query endpoint. A client can poll it to refresh a view;
-there is no WebSocket or server-sent event stream. Newly recorded clicks become
-visible after the worker delivers them to ClickHouse.
 
 ### Error responses
 
@@ -277,60 +294,29 @@ Common statuses include `400` for invalid input, `401` for authentication,
 conflicts, and `500` for operation failures. Security-filter responses can differ
 from the controller error body.
 
-## How click delivery works
 
-```text
-Visitor requests a short link
-  -> resolve URL and identify its owner
-  -> look up optional country/state
-  -> save Event in PostgreSQL analytics_outbox
-  -> return HTTP 302
-
-Scheduled OutboxWorker
-  -> lock up to 10,000 queued events, skipping rows held by another worker
-  -> send the batch to ClickHouse
-  -> delete the delivered batch from PostgreSQL
-
-Analytics API -> query ClickHouse -> return results
-```
-
-If delivery fails, the PostgreSQL transaction rolls back and a later poll retries
-the batch. Delivery is **at least once**: a crash after ClickHouse accepts the
-events but before PostgreSQL commits deletion can produce duplicates. The
-existing ClickHouse `MergeTree` table does not enforce event-ID uniqueness.
-
-PostgreSQL is the enabled default transport. Redis stream transport code is also
-present, but its worker/consumer-group setup is not the supported quickstart.
-Behind a reverse proxy, configure trusted client-IP handling before relying on
-the visitor IP: the controller currently uses `request.getRemoteAddr()`.
 
 ## How to test
 
-Use a running Docker engine for container-backed tests. E2E tests override the
-database URLs and credentials and use random host ports, separate containers,
-and no persistent volume mounts. They do not use your development databases.
+Start Docker with Linux containers enabled, then run these commands from the
+repository root. No local Java or Maven installation is needed, and the
+application containers do not need to be running.
 
 ```powershell
-# Compile all production and test sources without running tests
-.\mvnw.cmd -DskipTests test-compile
+# Build the test image with Java 21, Maven, and the test sources
+docker compose -f compose.test.yaml build tests
 
-# Run the complete test suite and package the application (the CI build)
-.\mvnw.cmd package
-
-# Run real application flows with disposable PostgreSQL, Redis, and ClickHouse
-.\mvnw.cmd -Pe2e test
-
-# Run only the PostgreSQL-to-ClickHouse transport suite
-.\mvnw.cmd -Pe2e -Dtest=PostgresTransportE2ETest test
+# Run the complete test suite
+docker compose -f compose.test.yaml run --rm tests test
 ```
 
-On Linux/macOS, use `./mvnw` instead of `.\mvnw.cmd`.
 
-Verified on **22 October 2026**: all **18 E2E tests passed** (5 users, 4 groups,
-5 URLs, and 4 PostgreSQL transport tests), with zero failures, errors, or skips.
-No suite-labeled test containers remained after the run.
-The complete default suite was also verified: **98 tests passed**, with zero
-failures, errors, or skips, and the application JAR was packaged successfully.
+
+To run only the E2E tests through Docker:
+
+```powershell
+docker compose -f compose.test.yaml run --rm tests -Pe2e test
+```
 
 | Test package | Scope |
 | --- | --- |
@@ -338,20 +324,5 @@ failures, errors, or skips, and the application JAR was packaged successfully.
 | `services` | Service behavior, failure results, group assignment, and geolocation mapping |
 | `integration` | Database mappings, migrations, and transport selection |
 | `e2e` | Real HTTP account/group/URL flows and real PostgreSQL-to-ClickHouse delivery |
-
-The `e2e` profile uses `target/e2e` and excludes `AnalyticsController`, whose API
-contract is still being developed. Reports are in
-`target/e2e/surefire-reports`. Containers are stopped after each test class;
-Testcontainers also registers cleanup on JVM exit. Check for leftovers with:
-
-```powershell
-docker ps -a --filter "label=com.shrtrl.test-suite=e2e"
-```
-
-The default `mvn test` runs API, service, integration, E2E, and application-startup
-tests. The startup test also uses disposable database containers, so no local
-database credentials are needed. Default-suite reports are in
-`target/surefire-reports`. GitHub Actions runs `./mvnw clean package`, including
-this complete suite.
 
 
